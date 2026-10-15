@@ -1,0 +1,17 @@
+name = "busstop-timer-api"
+main = "src/index.js"
+compatibility_date = "2026-10-16"
+workers_dev = true
+
+[vars]
+DEFAULT_RADIUS_METERS = "30"
+MAX_LOCATION_ACCURACY_METERS = "100"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "busstop-timer-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["* * * * *"]
