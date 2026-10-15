@@ -1,17 +1,17 @@
-# busstop_timer
+# Bus Stop Timer
 
-A new Flutter project.
+사용자가 등록한 버스·정류장과 시간대를 기준으로, 정류장 근처에서 버스 도착 예정 정보를 확인해 알림을 제공하는 프로젝트입니다.
 
-## Getting Started
+## 프로젝트 컨셉
 
-This project is a starting point for a Flutter application.
+- iOS, Android, Web App 지원을 목표로 합니다.
+- 휴대폰 위치 정보와 버스 도착 정보를 이용합니다.
+- 정류장 반경 초기값은 30m이며, GPS 오차 및 정류장 좌표 차이를 실측해 조정합니다.
+- 대상 정류장과 앞·뒤 정류장의 버스 정보를 비교해 노선 진행 상황과 도착 여부를 판단합니다.
+- 사용자가 등록한 시간대 안에서 등록 버스의 ETA가 5분 이내일 때 알림을 제공합니다.
 
-A few resources to get you started if this is your first Flutter project:
+플랫폼별 백그라운드 위치 및 알림 동작에는 차이가 있으므로, 알림이 항상 보장된다고 약속하지 않습니다. 데이터 제공자와 지역별 API 지원도 출시 전 확인이 필요합니다.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 기획 문서
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+요구사항, 기능 목록, 플랫폼별 구현 전략, 시스템 구성, 리스크, MVP 단계 및 출시 전 결정 항목은 [프로젝트 컨셉 문서](docs/PROJECT_CONCEPT.md)를 참고하세요.
