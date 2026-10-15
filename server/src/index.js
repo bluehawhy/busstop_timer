@@ -52,8 +52,12 @@ async function evaluate(request, env) {
     FROM subscriptions s JOIN stops p ON p.id=s.stop_id WHERE s.user_id=? AND s.enabled=1`).bind(userId).all();
   const events = [];
   let feed;
-  try { feed = await arrivalsFor(env, subscriptions.map((s) => s.stop_id).join(',')); }
-  catch { return json({ alerts: [], providerStatus: 'unavailable', evaluatedAt: now.toISOString() }, 503); }
+  try {
+    const stopIds = [...new Set(subscriptions.map((s) => s.stop_id))];
+    feed = (await Promise.all(stopIds.map((stopId) => arrivalsFor(env, stopId)))).flat();
+  } catch {
+    return json({ alerts: [], providerStatus: 'unavailable', evaluatedAt: now.toISOString() }, 503);
+  }
   for (const sub of subscriptions) {
     let weekdays;
     try { weekdays = JSON.parse(sub.weekdays); } catch { continue; }
