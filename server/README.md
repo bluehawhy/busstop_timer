@@ -29,7 +29,7 @@ Location is evaluated only from a fresh client fix. An ETA within five minutes g
 
 ## Security and production requirements
 
-This scaffold is not safe to expose as a public production API yet. The optional `API_BEARER_TOKEN` protects preview deployments, but a shared secret must never be embedded in a mobile/web client. Before release, add per-user authentication (OIDC/Firebase Auth/Cloudflare Access-compatible identity), enforce ownership from verified token claims, rate limiting, provider-specific quotas, data retention/deletion jobs, and privacy disclosures. The current `userId` request fields are identifiers, not authentication.
+All API routes except `/health` now fail closed unless `API_BEARER_TOKEN` is set. Use that only for local/private preview calls; a shared secret must never be embedded in a mobile/web client. The Flutter runtime's `previewBearerToken` exists for private development only. Before release, add per-user authentication (OIDC/Firebase Auth/Cloudflare Access-compatible identity), enforce ownership from verified token claims, rate limiting, provider-specific quotas, data retention/deletion jobs, and privacy disclosures. The current `userId` request fields are identifiers, not authentication.
 
 ## App runtime and background limits
 
