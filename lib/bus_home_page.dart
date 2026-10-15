@@ -14,6 +14,7 @@ class BusHomePage extends ConsumerStatefulWidget {
 class _BusHomePageState extends ConsumerState<BusHomePage> {
   int _selectedIndex = 0;
   final Map<String, bool> _alertEnabled = {};
+  final Map<String, String> _alertLeadByBus = {};
   bool _previewNotifications = true;
   bool _locationPreview = false;
 
@@ -903,7 +904,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
 
   Future<void> _showSchedule(BusArrivalInfo bus) async {
     final periods = ['1분 전', '3분 전', '5분 전', '10분 전'];
-    var selected = '5분 전';
+    var selected = _alertLeadByBus[bus.id] ?? '5분 전';
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -942,6 +943,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                   ),
                   onPressed: () {
+                    this.setState(() => _alertLeadByBus[bus.id] = selected);
                     Navigator.pop(context);
                     ScaffoldMessenger.of(this.context).showSnackBar(
                       const SnackBar(content: Text('설정 미리보기에 반영했어요.')),
