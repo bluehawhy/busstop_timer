@@ -7,10 +7,16 @@ export function haversineMeters(lat1, lon1, lat2, lon2) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function isWithinSchedule(date, start, end, weekdays) {
-  const day = date.getDay() === 0 ? 7 : date.getDay();
+export function isWithinSchedule(date, start, end, weekdays, timeZone = 'Asia/Seoul') {
+  let parts;
+  try {
+    parts = new Intl.DateTimeFormat('en-US', {
+      timeZone, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(date).reduce((values, part) => ({ ...values, [part.type]: part.value }), {});
+  } catch { return false; }
+  const day = ({ Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 })[parts.weekday];
   if (!weekdays.includes(day)) return false;
-  const now = date.getHours() * 60 + date.getMinutes();
+  const now = Number(parts.hour) * 60 + Number(parts.minute);
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   const from = sh * 60 + sm;
