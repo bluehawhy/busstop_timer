@@ -6,13 +6,9 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
 const bad = (message, status = 400) => json({ error: message }, status);
 const id = () => crypto.randomUUID();
 
-function cors(request, response) {
-  const origin = request.headers.get('Origin');
+function cors(_request, response) {
   const headers = new Headers(response.headers);
-  if (origin && origin === (request.cf?.httpProtocol ? new URL(request.url).origin : origin)) {
-    headers.set('Access-Control-Allow-Origin', origin);
-    headers.set('Vary', 'Origin');
-  }
+  headers.set('Access-Control-Allow-Origin', '*');
   headers.set('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   return new Response(response.body, { status: response.status, headers });
@@ -61,7 +57,7 @@ async function evaluate(request, env) {
   for (const sub of subscriptions) {
     let weekdays;
     try { weekdays = JSON.parse(sub.weekdays); } catch { continue; }
-    if (!isWithinSchedule(now, sub.schedule_start, sub.schedule_end, weekdays)) continue;
+    if (!isWithinSchedule(now, sub.schedule_start, sub.schedule_end, weekdays, sub.timezone)) continue;
     const distance = haversineMeters(latitude, longitude, sub.stop_lat, sub.stop_lon);
     const arrival = feed.find((row) => row.stopId === sub.stop_id && row.routeId === sub.route_id);
     if (!arrival || !shouldAlert({ distanceMeters: distance, radiusMeters: sub.radius_meters,
@@ -117,12 +113,15 @@ export default {
           weekdays.some((day) => !Number.isInteger(day) || day < 1 || day > 7) ||
           !/^([01]\d|2[0-3]):[0-5]\d$/.test(b.scheduleStart ?? '00:00') ||
           !/^([01]\d|2[0-3]):[0-5]\d$/.test(b.scheduleEnd ?? '23:59')) return cors(request, bad('INVALID_SUBSCRIPTION'));
+        const timezone = b.timezone ?? 'Asia/Seoul';
+        try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }); }
+        catch { return cors(request, bad('INVALID_TIMEZONE')); }
         const subscriptionId = id();
         await env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(String(b.userId)).run();
         await env.DB.prepare(`INSERT INTO subscriptions(id,user_id,stop_id,route_id,route_name,radius_meters,
-          eta_threshold_minutes,schedule_start,schedule_end,weekdays) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+          eta_threshold_minutes,schedule_start,schedule_end,weekdays,timezone) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
           .bind(subscriptionId, String(b.userId), String(b.stopId), String(b.routeId), b.routeName ?? null,
-            radius, threshold, b.scheduleStart ?? '00:00', b.scheduleEnd ?? '23:59', JSON.stringify(weekdays)).run();
+            radius, threshold, b.scheduleStart ?? '00:00', b.scheduleEnd ?? '23:59', JSON.stringify(weekdays), timezone).run();
         return cors(request, json({ id: subscriptionId }, 201));
       }
       if (path === '/api/subscriptions' && request.method === 'GET') {
