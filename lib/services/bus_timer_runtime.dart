@@ -37,9 +37,7 @@ class BusTimerRuntime {
           requestBadgePermission: false,
           requestSoundPermission: false,
         ),
-        web: WebInitializationSettings(
-          defaultIcon: 'icons/Icon-192.png',
-        ),
+        web: WebInitializationSettings(),
       ),
     );
   }
@@ -53,7 +51,7 @@ class BusTimerRuntime {
           WebFlutterLocalNotificationsPlugin>();
       if (web == null) return false;
       final permission = await web.requestNotificationsPermission();
-      if (permission != WebNotificationPermission.granted) return false;
+      if (permission != true) return false;
     } else {
       final notificationPermission = await _notifications
           .resolvePlatformSpecificImplementation<
