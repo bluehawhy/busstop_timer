@@ -74,11 +74,31 @@ class BusTimerRuntime {
       return false;
     }
 
+    final LocationSettings settings = defaultTargetPlatform == TargetPlatform.android
+        ? AndroidSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+            foregroundNotificationConfig: const ForegroundNotificationConfig(
+              notificationTitle: '버스 도착 알림 추적 중',
+              notificationText: '등록한 정류장과 버스 도착 정보를 확인합니다.',
+              enableWakeLock: true,
+              setOngoing: true,
+            ),
+          )
+        : defaultTargetPlatform == TargetPlatform.iOS
+            ? AppleSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 10,
+                pauseLocationUpdatesAutomatically: false,
+                allowBackgroundLocationUpdates: true,
+                showBackgroundLocationIndicator: true,
+              )
+            : const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                distanceFilter: 10,
+              );
     _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
-      ),
+      locationSettings: settings,
     ).listen(_evaluatePosition, onError: (Object error) {
       debugPrint('Bus Timer location stream error: $error');
     });
