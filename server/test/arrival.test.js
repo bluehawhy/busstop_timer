@@ -20,9 +20,9 @@ test('ETA must be non-negative and within threshold', () => {
 });
 
 test('schedule handles weekdays and overnight windows', () => {
-  assert.equal(isWithinSchedule(new Date('2026-10-19T23:30:00'), '22:00', '06:00', [1]), true);
-  assert.equal(isWithinSchedule(new Date('2026-10-20T05:30:00'), '22:00', '06:00', [1]), true);
-  assert.equal(isWithinSchedule(new Date('2026-10-20T12:00:00'), '22:00', '06:00', [2]), false);
+  assert.equal(isWithinSchedule(new Date('2026-10-19T14:30:00Z'), '22:00', '06:00', [1], 'Asia/Seoul'), true);
+  assert.equal(isWithinSchedule(new Date('2026-10-19T20:30:00Z'), '22:00', '06:00', [1], 'Asia/Seoul'), true);
+  assert.equal(isWithinSchedule(new Date('2026-10-20T03:00:00Z'), '22:00', '06:00', [2], 'Asia/Seoul'), false);
 });
 
 test('arrival provider payload is validated', () => {
