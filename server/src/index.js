@@ -43,10 +43,7 @@ async function evaluate(request, env) {
   const now = new Date(recordedAt ?? Date.now());
   if (!Number.isFinite(now.getTime()) || Math.abs(Date.now() - now.getTime()) > 5 * 60_000) return bad('STALE_LOCATION');
   await env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(userId).run();
-  await env.DB.prepare(`INSERT INTO location_snapshots(user_id,latitude,longitude,accuracy_meters,recorded_at)
-    VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET latitude=excluded.latitude,
-    longitude=excluded.longitude,accuracy_meters=excluded.accuracy_meters,recorded_at=excluded.recorded_at`)
-    .bind(userId, latitude, longitude, accuracyMeters, now.toISOString()).run();
+  // Coordinates are evaluated in memory and are deliberately not persisted to D1.
 
   const { results: subscriptions } = await env.DB.prepare(`SELECT s.*, p.latitude AS stop_lat,p.longitude AS stop_lon,p.name AS stop_name
     FROM subscriptions s JOIN stops p ON p.id=s.stop_id WHERE s.user_id=? AND s.enabled=1`).bind(userId).all();
