@@ -156,7 +156,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                     ],
                   ),
                 ),
-                if (trailing != null) trailing,
+                ?trailing,
               ],
             ),
           ),
@@ -922,16 +922,22 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
               const SizedBox(height: 20),
               const Text('도착 알림 시점', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.ink)),
               const SizedBox(height: 8),
-              for (final period in periods)
-                RadioListTile<String>(
-                  value: period,
-                  groupValue: selected,
-                  activeColor: AppColors.primary,
-                  title: Text(period),
-                  onChanged: (value) {
-                    if (value != null) setSheetState(() => selected = value);
-                  },
+              RadioGroup<String>(
+                groupValue: selected,
+                onChanged: (value) {
+                  if (value != null) setSheetState(() => selected = value);
+                },
+                child: Column(
+                  children: [
+                    for (final period in periods)
+                      RadioListTile<String>(
+                        value: period,
+                        activeColor: AppColors.primary,
+                        title: Text(period),
+                      ),
+                  ],
                 ),
+              ),
               const SizedBox(height: 8),
               const Text('알림 시간대: 평일 오전 7:00–9:00 (샘플)', style: TextStyle(color: AppColors.secondaryText)),
               const SizedBox(height: 14),
@@ -943,9 +949,9 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                     padding: const EdgeInsets.symmetric(vertical: 15),
                   ),
                   onPressed: () {
-                    this.setState(() => _alertLeadByBus[bus.id] = selected);
+                    setState(() => _alertLeadByBus[bus.id] = selected);
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(this.context).showSnackBar(
+                    ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('설정 미리보기에 반영했어요.')),
                     );
                   },
