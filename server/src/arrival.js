@@ -15,13 +15,15 @@ export function isWithinSchedule(date, start, end, weekdays, timeZone = 'Asia/Se
     }).formatToParts(date).reduce((values, part) => ({ ...values, [part.type]: part.value }), {});
   } catch { return false; }
   const day = ({ Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 })[parts.weekday];
-  if (!weekdays.includes(day)) return false;
   const now = Number(parts.hour) * 60 + Number(parts.minute);
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   const from = sh * 60 + sm;
   const to = eh * 60 + em;
-  return from <= to ? now >= from && now <= to : now >= from || now <= to;
+  if (from <= to) return weekdays.includes(day) && now >= from && now <= to;
+  const previousDay = day === 1 ? 7 : day - 1;
+  return (weekdays.includes(day) && now >= from) ||
+    (weekdays.includes(previousDay) && now <= to);
 }
 
 export function shouldAlert({ distanceMeters, radiusMeters, accuracyMeters, etaMinutes, thresholdMinutes }) {
