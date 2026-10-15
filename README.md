@@ -12,6 +12,12 @@
 
 플랫폼별 백그라운드 위치 및 알림 동작에는 차이가 있으므로, 알림이 항상 보장된다고 약속하지 않습니다. 데이터 제공자와 지역별 API 지원도 출시 전 확인이 필요합니다.
 
+## 디자인 컨셉
+
+![Bus Stop Timer design concept](assets/concept/design-overview.png)
+
+[메인 및 메뉴별 화면 시안 보기](assets/concept/README.md)
+
 ## 기획 문서
 
 요구사항, 기능 목록, 플랫폼별 구현 전략, 시스템 구성, 리스크, MVP 단계 및 출시 전 결정 항목은 [프로젝트 컨셉 문서](docs/PROJECT_CONCEPT.md)를 참고하세요.
