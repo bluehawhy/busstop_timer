@@ -1,11 +1,14 @@
-/// Pure client-side alert checks, kept aligned with the Worker rules.
+import 'dart:math' as math;
+
+/// Pure client-side geofence and ETA checks, aligned with the Worker rules.
 double haversineMeters(double lat1, double lon1, double lat2, double lon2) {
-  double radians(double value) => value * 3.141592653589793 / 180;
+  double radians(double value) => value * math.pi / 180;
   final dLat = radians(lat2 - lat1);
   final dLon = radians(lon2 - lon1);
-  final a = (sinSquared(dLat / 2)) +
-      (cosine(radians(lat1)) * cosine(radians(lat2)) * sinSquared(dLon / 2));
-  return 6371000 * 2 * atan2(sqrt(a), sqrt(1 - a));
+  final a = math.pow(math.sin(dLat / 2), 2) +
+      math.cos(radians(lat1)) * math.cos(radians(lat2)) *
+          math.pow(math.sin(dLon / 2), 2);
+  return 6371000 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
 }
 
 bool shouldShowArrivalAlert({
@@ -17,15 +20,7 @@ bool shouldShowArrivalAlert({
 }) {
   if (![distanceMeters, radiusMeters, accuracyMeters, etaMinutes, thresholdMinutes]
       .every((value) => value.isFinite)) return false;
-  final toleratedRadius = radiusMeters + accuracyMeters.clamp(0, 50);
+  final toleratedRadius = radiusMeters + accuracyMeters.clamp(0, 50).toDouble();
   return distanceMeters <= toleratedRadius &&
       etaMinutes >= 0 && etaMinutes <= thresholdMinutes;
 }
-
-double sinSquared(double x) {
-  final s = sinApprox(x);
-  return s * s;
-}
-
-// Small-angle functions are only used with latitude/longitude radians.
-// Use dart:math functions for production precision.
