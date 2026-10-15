@@ -25,11 +25,11 @@ The Worker cannot query every Korean local transit API with one universal contra
 - `GET /api/arrivals?stopId=...`
 - `POST /api/evaluate`: `{userId,latitude,longitude,accuracyMeters,recordedAt?}`
 
-Location is evaluated only from a fresh client fix. An ETA within five minutes generates one event when the device is within the stop radius (with GPS accuracy tolerance capped at 50m) and the subscription is inside its weekday/time window (default timezone: Asia/Seoul). Duplicate alert events are suppressed for ten minutes.
+Location is evaluated only from a fresh client fix and coordinates are not stored in D1. An ETA within five minutes generates one event when the device is within the stop radius (with GPS accuracy tolerance capped at 50m) and the subscription is inside its weekday/time window (default timezone: Asia/Seoul). Duplicate alert events are suppressed for ten minutes.
 
 ## Security and production requirements
 
-All API routes except `/health` now fail closed unless `API_BEARER_TOKEN` is set. Use that only for local/private preview calls; a shared secret must never be embedded in a mobile/web client. The Flutter runtime's `previewBearerToken` exists for private development only. Before release, add per-user authentication (OIDC/Firebase Auth/Cloudflare Access-compatible identity), enforce ownership from verified token claims, rate limiting, provider-specific quotas, data retention/deletion jobs, and privacy disclosures. The current `userId` request fields are identifiers, not authentication.
+All API routes except `/health` now fail closed unless `API_BEARER_TOKEN` is set. Use that only for local/private preview calls; a shared secret must never be embedded in a mobile/web client. The Flutter runtime's `previewBearerToken` exists for private development only. Before release, add per-user authentication (OIDC/Firebase Auth/Cloudflare Access-compatible identity), enforce ownership from verified token claims, rate limiting, provider-specific quotas, data retention/deletion jobs, and privacy disclosures. The current `userId` request fields are identifiers, not authentication. The Worker evaluates each submitted coordinate in memory; D1 stores no location history.
 
 ## App runtime and background limits
 
