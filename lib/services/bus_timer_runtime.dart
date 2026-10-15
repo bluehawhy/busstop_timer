@@ -11,6 +11,7 @@ class BusTimerRuntime {
   BusTimerRuntime({
     required this.apiBaseUrl,
     required this.userId,
+    this.previewBearerToken,
     http.Client? client,
     FlutterLocalNotificationsPlugin? notifications,
   })  : _client = client ?? http.Client(),
@@ -18,6 +19,8 @@ class BusTimerRuntime {
 
   final String apiBaseUrl;
   final String userId;
+  /// Preview-only shared-token support. Production must use a per-user auth token.
+  final String? previewBearerToken;
   final http.Client _client;
   final FlutterLocalNotificationsPlugin _notifications;
   StreamSubscription<Position>? _positionSubscription;
@@ -111,7 +114,10 @@ class BusTimerRuntime {
     final uri = Uri.parse('${apiBaseUrl.replaceFirst(RegExp(r'/+$'), '')}/api/evaluate');
     try {
       final response = await _client.post(uri,
-        headers: const {'content-type': 'application/json'},
+        headers: {
+          'content-type': 'application/json',
+          if (previewBearerToken != null) 'authorization': 'Bearer $previewBearerToken',
+        },
         body: jsonEncode({
           'userId': userId,
           'latitude': position.latitude,
