@@ -19,7 +19,9 @@ bool shouldShowArrivalAlert({
   required double thresholdMinutes,
 }) {
   if (![distanceMeters, radiusMeters, accuracyMeters, etaMinutes, thresholdMinutes]
-      .every((value) => value.isFinite)) return false;
+      .every((value) => value.isFinite)) {
+    return false;
+  }
   final toleratedRadius = radiusMeters + accuracyMeters.clamp(0, 50).toDouble();
   return distanceMeters <= toleratedRadius &&
       etaMinutes >= 0 && etaMinutes <= thresholdMinutes;
