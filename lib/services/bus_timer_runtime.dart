@@ -76,6 +76,9 @@ class BusTimerRuntime {
         permission == LocationPermission.unableToDetermine) {
       return false;
     }
+    // Native background mode requires the OS's Always/background grant.
+    // Web remains foreground-only because browsers suspend location access with a closed page.
+    if (!kIsWeb && permission != LocationPermission.always) return false;
 
     final LocationSettings settings = defaultTargetPlatform == TargetPlatform.android
         ? AndroidSettings(
