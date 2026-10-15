@@ -42,14 +42,6 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   UNIQUE(platform, token)
 );
 
-CREATE TABLE IF NOT EXISTS location_snapshots (
-  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  latitude REAL NOT NULL,
-  longitude REAL NOT NULL,
-  accuracy_meters REAL NOT NULL,
-  recorded_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS alert_events (
   id TEXT PRIMARY KEY,
   subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
