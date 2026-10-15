@@ -3,6 +3,12 @@ import 'package:busstop_timer/arrival_rules.dart';
 
 void main() {
   group('arrival alert rules', () {
+    test('calculates stop distance in meters', () {
+      final meters = haversineMeters(37.5665, 126.978, 37.5665, 126.9781);
+      expect(meters, greaterThan(8));
+      expect(meters, lessThan(10));
+    });
+
     test('uses a 30m radius with a capped GPS accuracy allowance', () {
       expect(shouldShowArrivalAlert(
         distanceMeters: 80, radiusMeters: 30, accuracyMeters: 50,
