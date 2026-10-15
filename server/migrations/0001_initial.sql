@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   eta_threshold_minutes INTEGER NOT NULL DEFAULT 5 CHECK (eta_threshold_minutes BETWEEN 1 AND 30),
   schedule_start TEXT NOT NULL DEFAULT '00:00',
   schedule_end TEXT NOT NULL DEFAULT '23:59',
+  timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',
   weekdays TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,7]',
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
