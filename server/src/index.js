@@ -17,8 +17,8 @@ function cors(_request, response) {
 async function requireApiKey(request, env) {
   // Configure API_BEARER_TOKEN for private preview deployments. Production mobile apps
   // need per-user identity (OIDC/Firebase Auth/Cloudflare Access), never a bundled shared secret.
-  if (!env.API_BEARER_TOKEN) return true;
-  return request.headers.get('Authorization') === `Bearer ${env.API_BEARER_TOKEN}`;
+  return Boolean(env.API_BEARER_TOKEN) &&
+    request.headers.get('Authorization') === `Bearer ${env.API_BEARER_TOKEN}`;
 }
 
 async function arrivalsFor(env, stopId) {
@@ -152,10 +152,5 @@ export default {
     } catch (error) {
       return cors(request, json({ error: error?.message === 'BUS_PROVIDER_UNAVAILABLE' ? error.message : 'INTERNAL_ERROR' }, 500));
     }
-  },
-  async scheduled(_event, env, ctx) {
-    // This cron is a backend hook for scheduled provider refreshes. Device location is never
-    // inferred from a stale location snapshot; an app must submit a fresh fix to /api/evaluate.
-    ctx.waitUntil(Promise.resolve());
   },
 };
