@@ -3,7 +3,7 @@ name: Bus Timer checks
 on:
   pull_request:
   push:
-    branches: [main, feat/location-arrival-alerts-d1]
+    branches: [main]
 
 jobs:
   worker-tests:
