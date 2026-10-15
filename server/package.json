@@ -1,0 +1,15 @@
+{
+  "name": "busstop-timer-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply busstop-timer-db --local",
+    "db:remote": "wrangler d1 migrations apply busstop-timer-db --remote",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
