@@ -1,0 +1,17 @@
+services:
+  bustimer:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18082:18082"
+    env_file: .env
+    volumes:
+      - ./data:/data
+      - ../build/web:/app/web:ro
+    init: true
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
