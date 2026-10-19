@@ -1,0 +1,6 @@
+# Add inside the existing app.bluewaikiki.top site block; keep other services.
+redir /bustimer /bustimer/ 308
+handle /bustimer/* {
+    reverse_proxy 127.0.0.1:18082
+}
+# Use handle (not handle_path): the Node server owns the /bustimer prefix.

@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "db:local": "wrangler d1 migrations apply busstop-timer-db --local",
-    "db:remote": "wrangler d1 migrations apply busstop-timer-db --remote",
-    "test": "node --test"
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "start": "node src/server.js",
+    "db:migrate": "node src/migrate.js",
+    "device:create": "node src/server.js create-device"
   },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+  "engines": {
+    "node": ">=24"
   }
 }
