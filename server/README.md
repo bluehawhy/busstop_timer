@@ -69,3 +69,13 @@ docker compose exec bustimer node src/server.js create-device minsu phone
 ## 백업
 
 볼륨 `server/data`를 유지한다. 실행 중 백업은 sqlite3 `.backup`을 사용하거나 서비스를 중단한 뒤 DB를 복사한다. 서버 재시작·이미지 교체 시 `docker compose down -v`나 data 디렉터리 삭제를 하지 않는다. 장애 시 `docker compose logs`와 `/bustimer/health`로 확인한다.
+
+## 공통 Docker Caddy 연결 (선택 적용)
+
+공통 게이트웨이로 전환할 때만 `server/compose.proxy.yaml`을 기존 Compose 파일 목록의 마지막에 추가합니다. `bustimer`의 호스트 포트를 제거하고 외부 `bus-proxy` 네트워크에서 `bus-api:18082`로 접근합니다. Node 서버의 내부 포트와 `/bustimer` 접두사는 그대로 유지합니다. Caddy는 `handle /bustimer/*`을 사용하며 `handle_path`로 접두사를 제거하지 않습니다.
+
+Docker Compose 2.24.4 이상이 필요합니다. 적용 전에 공통 서버에서 `bus-proxy`를 생성하고, 기존 프로젝트명과 모든 운영 Compose/override 파일을 확인합니다. 기존 bind 데이터 경로와 프로젝트명을 유지하여 DB를 보존합니다. 프록시 파일은 기본 설정에 자동 적용되지 않으며 PR 병합만으로 운영 포트가 바뀌지 않습니다.
+
+실제 포트 제거는 호스트 Caddy에서 Docker Caddy로 전환하는 유지보수 구간에 실행합니다. 먼저 기존 포트를 남긴 상태에서 내부 DNS와 `/bustimer/health` 응답을 확인합니다. 적용 후 CLI 업데이트도 모든 기존 Compose 파일과 마지막 프록시 파일을 함께 사용합니다. 되돌릴 때는 프록시 파일만 제외하고 동일 프로젝트/서비스를 재생성합니다.
+
+전체 절차: [공통 프록시 구성](https://github.com/bluehawhy/bluewaikiki_api_server/blob/main/proxy/README.md).

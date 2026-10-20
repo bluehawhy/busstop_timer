@@ -1,0 +1,13 @@
+# Add AFTER the existing production Compose files. Compose >= 2.24.4.
+services:
+  bustimer:
+    ports: !reset []
+    networks:
+      default: {}
+      bus-proxy:
+        aliases: [bus-api]
+
+networks:
+  bus-proxy:
+    external: true
+    name: bus-proxy
