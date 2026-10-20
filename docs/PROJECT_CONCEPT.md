@@ -128,7 +128,7 @@
 
 ## 8. 시스템 구성 및 데이터 모델 제안
 
-운영은 Ubuntu 앱 서버 + SQLite를 사용한다. 웹 주소는 `https://app.bluewaikiki.top/bustimer/`다. 구현 상세는 [상세설계](DETAILED_DESIGN.md), [DB 설계](DATABASE_DESIGN.md)를 따른다.
+운영은 Ubuntu 앱 서버 + 프로젝트 전용 PostgreSQL를 사용한다. 웹 주소는 `https://bustimer.bluewaikiki.top/`다. 구현 상세는 [상세설계](DETAILED_DESIGN.md), [DB 설계](DATABASE_DESIGN.md)를 따른다.
 
 - 교통 데이터 어댑터: 지역별 정류장·노선·운행일·실시간 차량 정보를 공통 형식으로 변환한다.
 - 경로 탐색기: 정류장 연결과 환승 도보를 이용해 직행·환승 후보를 생성한다.

@@ -1,6 +1,6 @@
-# Add inside the existing app.bluewaikiki.top site block; keep other services.
-redir /bustimer /bustimer/ 308
-handle /bustimer/* {
-    reverse_proxy 127.0.0.1:18082
+# Add as a separate site in the common Docker Caddy configuration.
+# Both Caddy and the bus API must join the external bus-proxy network.
+bustimer.bluewaikiki.top {
+    encode zstd gzip
+    reverse_proxy bus-api:18082
 }
-# Use handle (not handle_path): the Node server owns the /bustimer prefix.

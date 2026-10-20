@@ -8,8 +8,8 @@ services:
       - "127.0.0.1:18082:18082"
     environment:
       DATABASE_URL: postgresql://bustimer:${BUS_DB_PASSWORD:?Set BUS_DB_PASSWORD in server/.env}@postgres:5432/bustimer
-      BASE_PATH: /bustimer
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.bluewaikiki.top}
+      BASE_PATH: /
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://bustimer.bluewaikiki.top}
       API_BEARER_TOKEN: ${API_BEARER_TOKEN:?Set API_BEARER_TOKEN in server/.env}
       BUS_ARRIVALS_URL: ${BUS_ARRIVALS_URL:-}
       BUS_API_KEY: ${BUS_API_KEY:-}
@@ -29,7 +29,7 @@ services:
       - default
       - database
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18082/bustimer/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18082/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5

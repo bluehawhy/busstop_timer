@@ -13,7 +13,7 @@ class JourneyHomePage extends StatefulWidget {
 
 class _JourneyHomePageState extends State<JourneyHomePage> {
   final _token = TextEditingController();
-  final _base = TextEditingController(text: const String.fromEnvironment('BUS_API_URL', defaultValue: 'https://app.bluewaikiki.top/bustimer'));
+  final _base = TextEditingController(text: const String.fromEnvironment('BUS_API_URL', defaultValue: 'https://bustimer.bluewaikiki.top'));
   final _notifications = FlutterLocalNotificationsPlugin();
   JourneyService? _api;
   List<dynamic> _stops = [], _comparisons = [], _saved = [];

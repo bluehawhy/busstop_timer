@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 class JourneyService {
   JourneyService({required this.token, String? baseUrl})
       : baseUrl = (baseUrl ?? const String.fromEnvironment('BUS_API_URL',
-          defaultValue: 'https://app.bluewaikiki.top/bustimer')).replaceFirst(RegExp(r'/+$'), '');
+          defaultValue: 'https://bustimer.bluewaikiki.top')).replaceFirst(RegExp(r'/+$'), '');
   final String token;
   final String baseUrl;
   final http.Client _client = http.Client();
