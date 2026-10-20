@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export async function openDatabase(connectionString = process.env.DATABASE_URL) {
-  if (!connectionString) throw new Error('DATABASE_URL is required; SQLite fallback is disabled');
+  if (!connectionString) throw new Error('DATABASE_URL is required');
   const pool = new pg.Pool({ connectionString, max: 5, connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000, statement_timeout: 15000, idle_in_transaction_session_timeout: 30000,
     application_name: 'busstop-timer' });

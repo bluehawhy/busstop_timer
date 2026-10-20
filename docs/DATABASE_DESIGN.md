@@ -6,7 +6,7 @@ Ubuntu에서 Node.js 24 API와 버스 프로젝트 전용 PostgreSQL 16 컨테�
 
 관리자 `bustimer_admin`과 앱 계정 `bustimer`를 분리한다. 앱 계정은 전용 `bustimer` DB를 소유하며 superuser·DB 생성·역할 생성 권한이 없다. DB 접속 풀은 API 프로세스당 최대 5개다. 모든 트랜잭션은 하나의 풀 연결에서 수행하고 세션 평가 시 행 잠금, 상태 변경 시 revision 조건과 갱신 행 수를 확인한다.
 
-`server/migrations/postgres/`의 SQL과 별도 `schema_migrations`를 사용한다. 마이그레이션은 advisory transaction lock과 단일 트랜잭션으로 적용한다. 원래 SQLite 마이그레이션은 기존 스키마 참고용으로 보관하며 PostgreSQL에서 실행하지 않는다. SQLite 데이터는 읽기 전용 가져오기 도구로 비어 있는 대상 DB에 명시적으로 복사한다. D1 원격 DB의 자동 이전은 지원하지 않는다.
+`server/migrations/postgres/`의 SQL과 별도 `schema_migrations`를 사용한다. 마이그레이션은 advisory transaction lock과 단일 트랜잭션으로 적용한다. 신규 배포의 빈 PostgreSQL DB에 필요한 테이블을 생성한다.
 
 ## 테이블
 
@@ -43,4 +43,4 @@ JSON 스냅샷에는 선택한 버스 조합과 계산 근거를 보존한다. �
 
 검색 결과는 10분 후 삭제한다. 이동 세션·저장 경로·알림은 현재 자동 삭제하지 않는다. 운영 전 보존 기간을 정하고 정리 작업을 추가해야 한다. 기기 토큰 철회는 해당 `api_devices` 행 삭제로 처리한다. 위치 좌표·이동 경로 GPS 이력은 수집하지 않는다.
 
-라이브 백업은 `pg_dump -Fc`를 사용한다. API를 중지한 유지보수 시간에 별도의 빈 DB로 `pg_restore`한 뒤 확인한다. API 이미지 교체와 DB 볼륨은 별도로 관리한다. 기존 SQLite 원본은 전환 후에도 보관하고 자동 삭제하지 않는다. PostgreSQL에 새로 생성된 데이터는 SQLite로 자동 역이관되지 않는다. 상세 명령과 복구 절차는 [운영 안내](../server/README.md)를 따른다.
+라이브 백업은 `pg_dump -Fc`를 사용한다. API를 중지한 유지보수 시간에 별도의 빈 DB로 `pg_restore`한 뒤 확인한다. API 이미지 교체와 DB 볼륨은 별도로 관리한다. 상세 명령과 복구 절차는 [운영 안내](../server/README.md)를 따른다.

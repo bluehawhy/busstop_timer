@@ -10,7 +10,7 @@
 
 ## 최초 배포
 
-기존 버스 컨테이너가 있다면 Compose 프로젝트명·파일 목록과 DB 경로부터 확인한다. 아래 `busstop_timer`는 **신규 배포용 프로젝트명**이다. 기존 프로젝트명은 그대로 사용한다. 비어 있지 않은 SQLite DB가 있다면 먼저 아래 가져오기 절차를 따른다.
+신규 배포 프로젝트명은 `busstop_timer`다. 최초 실행 시 버스 전용 PostgreSQL 볼륨과 DB를 만들고 필요한 테이블을 자동 생성한다.
 
 저장소 루트에서 웹을 빌드한다. Flutter SDK가 없는 호스트에서는 다른 빌드 환경에서 동일 명령으로 생성한 `build/web`을 배치한다. 저장소의 `web/` 소스 디렉터리로 대체하면 안 된다.
 
@@ -21,7 +21,7 @@ cd server
 cp -n .env.example .env
 ```
 
-`.env`의 `POSTGRES_ADMIN_PASSWORD`, `BUS_DB_PASSWORD`, `API_BEARER_TOKEN`을 각각 다른 임의 값으로 설정한다. 각 값은 `openssl rand -hex 32`로 생성할 수 있다. DB 비밀번호는 URL에 조합하므로 16진수 문자열을 사용한다. 기존 정상 토큰은 유지하고 실제 값은 커밋하지 않는다. `chmod 600 .env`로 권한을 제한한다.
+`.env`의 `POSTGRES_ADMIN_PASSWORD`, `BUS_DB_PASSWORD`, `API_BEARER_TOKEN`을 각각 다른 임의 값으로 설정한다. 각 값은 `openssl rand -hex 32`로 생성할 수 있다. DB 비밀번호는 URL에 조합하므로 16진수 문자열을 사용한다. 실제 값은 커밋하지 않는다. `chmod 600 .env`로 권한을 제한한다.
 
 공통 Docker Caddy 구성에서는 Compose 2.24.4 이상이 필요하다. 프록시 overlay를 항상 마지막에 지정한다.
 
@@ -62,40 +62,9 @@ curl --fail --show-error https://app.bluewaikiki.top/bustimer/health
 
 버스 연결이 확인되면 다음 유지보수 때 host-relay의 `HOST_RELAY_TARGETS`에서 `bus:18082`만 제외할 수 있다. 다른 relay 항목은 계속 사용한다. 프로젝트 업데이트 때도 위의 프로젝트명과 Compose 파일 목록을 유지한다.
 
-## 기존 SQLite 데이터 가져오기
-
-서버를 가동하기 전에 실행하는 선택 절차다. SQLite 자동 대체나 자동 삭제는 하지 않는다. D1 원격 DB를 직접 읽는 도구는 아니다.
-
-1. SQLite를 쓰던 API를 중지한다. DB·WAL·SHM을 포함한 안전한 백업 또는 SQLite backup API로 만든 스냅샷을 별도 경로에 보관한다.
-2. 새 이미지와 PostgreSQL만 준비한다. 기존 컨테이너를 교체하기 전 현재 이미지 ID, Compose 파일과 `.env`도 보관한다.
-
-```bash
-cd /home/mins/source/busstop_timer/server
-docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml build bustimer
-docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --wait postgres
-```
-
-3. 원본 SQLite 디렉터리를 읽기 전용으로 마운트하고 가져온다. `/absolute/path/to/sqlite-backup`과 DB 파일명은 실제 백업에 맞춘다.
-
-```bash
-docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml run --rm --no-deps \
-  -v /absolute/path/to/sqlite-backup:/sqlite-source:ro \
-  bustimer node src/import-sqlite.js /sqlite-source/bustimer.sqlite
-```
-
-가져오기는 알려진 테이블을 외래키 순서로 복사하고, 토큰 해시·ID·구독·이동 세션·알림을 보존한다. 대상 테이블이 하나라도 비어 있지 않으면 중단한다. 알 수 없는 열이나 제약 위반도 중단하고 전체 복사를 롤백한다. SQLite는 읽기 전용 스냅샷으로 읽으며 테이블별 행 수를 확인한다. 일부 테이블이 없는 이전 스키마도 알려진 테이블 범위에서 처리하지만, 원본과 다른 스키마를 임의로 변환하지 않는다. PostgreSQL의 마이그레이션 이력은 새로 생성한다.
-
-4. 정상 완료 후 API를 시작하고 기기 토큰·저장 경로·구독과 프록시 응답을 확인한다. **기존 SQLite 파일은 보관한다.**
-
-```bash
-docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --wait bustimer
-```
-
-되돌릴 때는 API를 중지하고 보관한 이전 이미지·Compose·환경 설정 및 SQLite 백업으로 복구한다. 전환 후 PostgreSQL에 새로 저장된 데이터는 SQLite로 자동 역이관되지 않는다. 새 PostgreSQL 볼륨도 삭제하지 않는다.
-
 ## DB와 기기 등록
 
-시작 시 PostgreSQL 마이그레이션을 트랜잭션으로 적용한다. 동시에 기동하는 경우에도 마이그레이션을 직렬화한다. SQLite/D1 데이터는 자동 복사하지 않는다. 아래 SQLite 가져오기 절차는 필요할 때만 별도로 실행한다.
+시작 시 PostgreSQL 마이그레이션을 트랜잭션으로 적용한다. 동시에 기동하는 경우에도 마이그레이션을 직렬화한다. 최초 배포는 빈 PostgreSQL DB에서 시작한다.
 
 ```bash
 cd server

@@ -7,8 +7,7 @@
     "test": "node --test",
     "start": "node src/server.js",
     "db:migrate": "node src/migrate.js",
-    "device:create": "node src/server.js create-device",
-    "db:import-sqlite": "node src/import-sqlite.js"
+    "device:create": "node src/server.js create-device"
   },
   "engines": {
     "node": ">=24"
