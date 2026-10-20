@@ -42,11 +42,11 @@ async function evaluate(request, env) {
   }
   const now = new Date(recordedAt ?? Date.now());
   if (!Number.isFinite(now.getTime()) || Math.abs(Date.now() - now.getTime()) > 5 * 60_000) return bad('STALE_LOCATION');
-  await env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(userId).run();
+  await env.DB.prepare(`INSERT INTO users(id) VALUES ($1) ON CONFLICT DO NOTHING`).bind(userId).run();
   // Coordinates are evaluated in memory and are deliberately not persisted to D1.
 
   const { results: subscriptions } = await env.DB.prepare(`SELECT s.*, p.latitude AS stop_lat,p.longitude AS stop_lon,p.name AS stop_name
-    FROM subscriptions s JOIN stops p ON p.id=s.stop_id WHERE s.user_id=? AND s.enabled=1`).bind(userId).all();
+    FROM subscriptions s JOIN stops p ON p.id=s.stop_id WHERE s.user_id=$1 AND s.enabled=1`).bind(userId).all();
   const events = [];
   let feed;
   try {
@@ -63,12 +63,12 @@ async function evaluate(request, env) {
     const arrival = feed.find((row) => row.stopId === sub.stop_id && row.routeId === sub.route_id);
     if (!arrival || !shouldAlert({ distanceMeters: distance, radiusMeters: sub.radius_meters,
       accuracyMeters, etaMinutes: arrival.etaMinutes, thresholdMinutes: sub.eta_threshold_minutes })) continue;
-    const recent = await env.DB.prepare(`SELECT id FROM alert_events WHERE subscription_id=?
-      AND created_at >= datetime('now','-10 minutes') LIMIT 1`).bind(sub.id).first();
+    const recent = await env.DB.prepare(`SELECT id FROM alert_events WHERE subscription_id=$1
+      AND created_at >= to_char((CURRENT_TIMESTAMP - INTERVAL '10 minutes') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') LIMIT 1`).bind(sub.id).first();
     if (recent) continue;
     const event = { id: id(), subscriptionId: sub.id, stopName: sub.stop_name, routeId: sub.route_id,
       routeName: sub.route_name, etaMinutes: arrival.etaMinutes, distanceMeters: Math.round(distance) };
-    await env.DB.prepare('INSERT INTO alert_events(id,subscription_id,eta_minutes) VALUES (?,?,?)')
+    await env.DB.prepare(`INSERT INTO alert_events(id,subscription_id,eta_minutes) VALUES ($1,$2,$3)`)
       .bind(event.id, sub.id, event.etaMinutes).run();
     events.push(event);
   }
@@ -89,7 +89,7 @@ export default {
         const radius = Math.min(Math.max(Number(url.searchParams.get('radius') || 1000), 50), 5000);
         if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return cors(request, bad('INVALID_COORDINATES'));
         const dLat = radius / 111_000; const dLon = radius / (111_000 * Math.max(Math.cos(lat * Math.PI / 180), 0.01));
-        const { results } = await env.DB.prepare(`SELECT * FROM stops WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?`)
+        const { results } = await env.DB.prepare(`SELECT * FROM stops WHERE latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4`)
           .bind(lat - dLat, lat + dLat, lon - dLon, lon + dLon).all();
         return cors(request, json(results.map((s) => ({ ...s, distanceMeters: Math.round(haversineMeters(lat, lon, s.latitude, s.longitude)) }))
           .filter((s) => s.distanceMeters <= radius).sort((a,b) => a.distanceMeters - b.distanceMeters)));
@@ -98,9 +98,9 @@ export default {
         const b = await request.json();
         if (!b?.id || !b?.name || !Number.isFinite(b.latitude) || !Number.isFinite(b.longitude) ||
           Math.abs(b.latitude) > 90 || Math.abs(b.longitude) > 180) return cors(request, bad('INVALID_STOP'));
-        await env.DB.prepare(`INSERT INTO stops(id,name,latitude,longitude,provider_stop_id) VALUES(?,?,?,?,?)
+        await env.DB.prepare(`INSERT INTO stops(id,name,latitude,longitude,provider_stop_id) VALUES($1,$2,$3,$4,$5)
           ON CONFLICT(id) DO UPDATE SET name=excluded.name,latitude=excluded.latitude,longitude=excluded.longitude,
-          provider_stop_id=excluded.provider_stop_id,updated_at=datetime('now')`)
+          provider_stop_id=excluded.provider_stop_id,updated_at=to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`)
           .bind(String(b.id), String(b.name), b.latitude, b.longitude, b.providerStopId ?? null).run();
         return cors(request, json({ id: String(b.id) }, 201));
       }
@@ -118,9 +118,9 @@ export default {
         try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }); }
         catch { return cors(request, bad('INVALID_TIMEZONE')); }
         const subscriptionId = id();
-        await env.DB.prepare('INSERT OR IGNORE INTO users(id) VALUES (?)').bind(String(b.userId)).run();
+        await env.DB.prepare(`INSERT INTO users(id) VALUES ($1) ON CONFLICT DO NOTHING`).bind(String(b.userId)).run();
         await env.DB.prepare(`INSERT INTO subscriptions(id,user_id,stop_id,route_id,route_name,radius_meters,
-          eta_threshold_minutes,schedule_start,schedule_end,weekdays,timezone) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+          eta_threshold_minutes,schedule_start,schedule_end,weekdays,timezone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`)
           .bind(subscriptionId, String(b.userId), String(b.stopId), String(b.routeId), b.routeName ?? null,
             radius, threshold, b.scheduleStart ?? '00:00', b.scheduleEnd ?? '23:59', JSON.stringify(weekdays), timezone).run();
         return cors(request, json({ id: subscriptionId }, 201));
@@ -128,14 +128,14 @@ export default {
       if (path === '/api/subscriptions' && request.method === 'GET') {
         const userId = url.searchParams.get('userId');
         if (!userId) return cors(request, bad('USER_ID_REQUIRED'));
-        const { results } = await env.DB.prepare('SELECT * FROM subscriptions WHERE user_id=? ORDER BY created_at DESC').bind(userId).all();
+        const { results } = await env.DB.prepare(`SELECT * FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC`).bind(userId).all();
         return cors(request, json(results));
       }
       const deletion = path.match(/^\/api\/subscriptions\/([\w-]+)$/);
       if (deletion && request.method === 'DELETE') {
         const userId = url.searchParams.get('userId');
         if (!userId) return cors(request, bad('USER_ID_REQUIRED'));
-        await env.DB.prepare('DELETE FROM subscriptions WHERE id=? AND user_id=?').bind(deletion[1], userId).run();
+        await env.DB.prepare(`DELETE FROM subscriptions WHERE id=$1 AND user_id=$2`).bind(deletion[1], userId).run();
         return cors(request, json({ deleted: true }));
       }
       if (path === '/api/evaluate' && request.method === 'POST') return cors(request, await evaluate(request, env));

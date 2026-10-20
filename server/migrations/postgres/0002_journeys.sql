@@ -1,7 +1,7 @@
--- Additive SQLite migration; legacy subscription data is preserved.
+-- PostgreSQL journey tables.
 CREATE TABLE api_devices (
  token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- label TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+ label TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 CREATE TABLE routes (
  id TEXT PRIMARY KEY, name TEXT NOT NULL, direction TEXT NOT NULL, destination TEXT NOT NULL
@@ -40,7 +40,7 @@ CREATE TABLE saved_journeys (
  name TEXT NOT NULL, origin_stop_id TEXT NOT NULL REFERENCES stops(id),
  destination_stop_id TEXT NOT NULL REFERENCES stops(id),
  weekdays TEXT NOT NULL, departure_time TEXT NOT NULL,
- timezone TEXT NOT NULL DEFAULT 'Asia/Seoul', created_at TEXT NOT NULL DEFAULT (datetime('now'))
+ timezone TEXT NOT NULL DEFAULT 'Asia/Seoul', created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 CREATE INDEX saved_journeys_user_idx ON saved_journeys(user_id);
 CREATE TABLE journey_options (
@@ -52,13 +52,13 @@ CREATE TABLE journey_sessions (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  option_json TEXT NOT NULL, current_leg INTEGER NOT NULL DEFAULT 0,
  status TEXT NOT NULL CHECK(status IN ('waiting','riding','transfer','completed','cancelled','disrupted')),
- revision INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+ revision INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 CREATE INDEX journey_sessions_user_idx ON journey_sessions(user_id,status);
 CREATE TABLE journey_alerts (
  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES journey_sessions(id) ON DELETE CASCADE,
  leg_index INTEGER NOT NULL, vehicle_key TEXT NOT NULL, kind TEXT NOT NULL,
- body_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+ body_json TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
  acknowledged_at TEXT, UNIQUE(session_id,leg_index,vehicle_key,kind)
 );
 CREATE INDEX journey_alerts_pending_idx ON journey_alerts(session_id,acknowledged_at);

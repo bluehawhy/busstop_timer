@@ -4,7 +4,7 @@
 
 직장인·학생의 반복 이동을 위해 정류장 기반 직행·최대 2회 환승 경로와 구간별 버스를 비교·선택한다. 배포 주소는 `https://app.bluewaikiki.top/bustimer/`, API는 `/bustimer/api/`다. 도메인 루트의 앱 목록과 가계부 `/ledger/`는 별도 서비스다.
 
-실행 구성: Caddy → Ubuntu Node.js 24 HTTP 서버 → SQLite. Flutter Web 산출물은 같은 서버가 `/bustimer/`에서 제공한다. 모바일도 동일 API에 접속한다. Cloudflare Worker·D1은 이전 구성으로 분리한다.
+실행 구성: 공통 Docker Caddy → 버스 전용 Node.js 24 API → 버스 전용 PostgreSQL 16. API·DB는 버스 Compose 프로젝트로 관리하며 PostgreSQL은 내부 DB 네트워크와 전용 볼륨을 사용한다. Flutter Web 산출물은 같은 서버가 `/bustimer/`에서 제공한다. 모바일도 동일 API에 접속한다. Cloudflare Worker·D1은 이전 구성으로 분리한다.
 
 ## 경로 엔진
 
@@ -59,7 +59,7 @@ Ubuntu 서버가 15초마다 활성 세션을 평가한다. 앱도 15초마다 �
 
 ## 인증·공급자 연동
 
-관리자는 서버 CLI로 사용자별 기기 토큰을 발급한다. SQLite에는 SHA-256 해시만 저장한다. 신규 API는 토큰으로 user_id를 결정하고 클라이언트의 userId를 신뢰하지 않는다. API_BEARER_TOKEN은 관리자 import와 이전 API 전용이며 앱에 넣지 않는다. 초기 앱은 기기 토큰을 메모리에만 보유하므로 재실행 시 재입력이 필요하다.
+관리자는 서버 CLI로 사용자별 기기 토큰을 발급한다. PostgreSQL에는 SHA-256 해시만 저장한다. 신규 API는 토큰으로 user_id를 결정하고 클라이언트의 userId를 신뢰하지 않는다. API_BEARER_TOKEN은 관리자 import와 이전 API 전용이며 앱에 넣지 않는다. 초기 앱은 기기 토큰을 메모리에만 보유하므로 재실행 시 재입력이 필요하다.
 
 운영 CORS 기본값은 `https://app.bluewaikiki.top`이다. 경로 `/ledger/` 또는 `/bustimer/`를 Origin에 포함하지 않는다. 본문은 4MiB로 제한한다. 공개 출시 전 계정 인증·기기 등록 UX, 요청 제한과 토큰 재발급·철회 UI를 보완해야 한다.
 

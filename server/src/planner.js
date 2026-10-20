@@ -23,12 +23,12 @@ export function validateSearch(input, now = Date.now()) {
     departureAt: iso(depart), compareCount, compareStepMinutes, maxTransfers, bufferSeconds };
 }
 
-export function loadRides(db, now, start, end) {
-  const rows = db.prepare(`SELECT s.*, t.route_id, t.source, r.name, r.direction, r.destination,
+export async function loadRides(db, now, start, end) {
+  const rows = (await db.prepare(`SELECT s.*, t.route_id, t.source, r.name, r.direction, r.destination,
     p.name AS stop_name FROM stop_times s JOIN trips t ON t.id=s.trip_id
     JOIN routes r ON r.id=t.route_id JOIN stops p ON p.id=s.stop_id
-    WHERE t.id IN (SELECT trip_id FROM stop_times WHERE departure_at BETWEEN ? AND ?)
-    ORDER BY t.id,s.sequence`).all(iso(start - 86400000), iso(end + 86400000));
+    WHERE t.id IN (SELECT trip_id FROM stop_times WHERE departure_at BETWEEN $1 AND $2)
+    ORDER BY t.id,s.sequence`).all(iso(start - 86400000), iso(end + 86400000)));
   const groups = new Map();
   for (const row of rows) {
     if (!groups.has(row.trip_id)) groups.set(row.trip_id, []);
@@ -39,12 +39,12 @@ export function loadRides(db, now, start, end) {
       departure: fresh && row.predicted_departure_at ? ms(row.predicted_departure_at) : ms(row.departure_at),
       basis: fresh && row.predicted_departure_at ? 'realtime' : 'timetable' });
   }
-  const windows = db.prepare(`SELECT h.*,r.name,r.direction,r.destination FROM headway_windows h
-    JOIN routes r ON r.id=h.route_id WHERE first_departure_at <= ? AND last_departure_at >= ?`)
-    .all(iso(end), iso(start - 86400000));
+  const windows = (await db.prepare(`SELECT h.*,r.name,r.direction,r.destination FROM headway_windows h
+    JOIN routes r ON r.id=h.route_id WHERE first_departure_at <= $1 AND last_departure_at >= $2`)
+    .all(iso(end), iso(start - 86400000)));
   for (const window of windows) {
-    const stops = db.prepare(`SELECT rs.*,p.name AS stop_name FROM route_stops rs JOIN stops p ON p.id=rs.stop_id
-      WHERE route_id=? ORDER BY sequence`).all(window.route_id);
+    const stops = (await db.prepare(`SELECT rs.*,p.name AS stop_name FROM route_stops rs JOIN stops p ON p.id=rs.stop_id
+      WHERE route_id=$1 ORDER BY sequence`).all(window.route_id));
     for (let departure = ms(window.first_departure_at), count = 0;
       departure <= ms(window.last_departure_at) && departure <= end && count < 1500;
       departure += window.headway_seconds * 1000, count++) {
@@ -75,11 +75,11 @@ export function loadRides(db, now, start, end) {
   return rides;
 }
 
-export function plan(db, request, now = Date.now()) {
+export async function plan(db, request, now = Date.now()) {
   const start = ms(request.departureAt);
   const end = start + (request.compareCount - 1) * request.compareStepMinutes * MINUTE + 4 * 3600000;
-  const rides = loadRides(db, now, start, end);
-  const transfers = db.prepare('SELECT * FROM transfers').all();
+  const rides = await loadRides(db, now, start, end);
+  const transfers = (await db.prepare(`SELECT * FROM transfers`).all());
   const comparisons = [];
   for (let slot = 0; slot < request.compareCount; slot++) {
     const departure = start + slot * request.compareStepMinutes * MINUTE;

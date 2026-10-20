@@ -2,9 +2,11 @@
 
 ## 운영 환경과 호환성
 
-Ubuntu에서 Node.js 24 API와 SQLite를 실행한다. DB 파일은 `server/data/bustimer.sqlite`, Docker에서는 `/data/bustimer.sqlite`다. WAL·외래키·5초 busy timeout을 적용한다. 단일 홈서버 프로세스 운영을 기준으로 하며 다중 인스턴스 DB 파일 공유는 지원하지 않는다.
+Ubuntu에서 Node.js 24 API와 버스 프로젝트 전용 PostgreSQL 16 컨테이너를 실행한다. 다른 프로젝트 DB 컨테이너와 볼륨을 공유하지 않는다. `postgres_data` named volume에 데이터를 보관하며 PostgreSQL은 호스트 포트를 공개하지 않는다. API만 내부 DB 네트워크와 공통 프록시 네트워크를 연결한다.
 
-기존 `0001_initial.sql`은 유지한다. `0002_journeys.sql`은 추가 테이블만 생성하고 `schema_migrations`에 성공한 파일을 기록한다. 파일별 트랜잭션으로 적용하며 실패 시 롤백한다. 기존 D1 데이터를 자동 이전하지는 않는다. 운영 D1 데이터가 있다면 별도 export/import가 필요하다.
+관리자 `bustimer_admin`과 앱 계정 `bustimer`를 분리한다. 앱 계정은 전용 `bustimer` DB를 소유하며 superuser·DB 생성·역할 생성 권한이 없다. DB 접속 풀은 API 프로세스당 최대 5개다. 모든 트랜잭션은 하나의 풀 연결에서 수행하고 세션 평가 시 행 잠금, 상태 변경 시 revision 조건과 갱신 행 수를 확인한다.
+
+`server/migrations/postgres/`의 SQL과 별도 `schema_migrations`를 사용한다. 마이그레이션은 advisory transaction lock과 단일 트랜잭션으로 적용한다. 신규 배포의 빈 PostgreSQL DB에 필요한 테이블을 생성한다.
 
 ## 테이블
 
@@ -41,4 +43,4 @@ JSON 스냅샷에는 선택한 버스 조합과 계산 근거를 보존한다. �
 
 검색 결과는 10분 후 삭제한다. 이동 세션·저장 경로·알림은 현재 자동 삭제하지 않는다. 운영 전 보존 기간을 정하고 정리 작업을 추가해야 한다. 기기 토큰 철회는 해당 `api_devices` 행 삭제로 처리한다. 위치 좌표·이동 경로 GPS 이력은 수집하지 않는다.
 
-라이브 백업은 SQLite `.backup` 명령을 사용한다. 파일만 복사하려면 서버를 중단한 뒤 DB 파일과 WAL 상태를 정리하고 복사한다. 롤백은 새 앱/API를 이전 버전으로 되돌리되 추가 테이블은 유지한다. DB 파일을 삭제하거나 초기 마이그레이션을 다시 만드는 방식으로 롤백하지 않는다.
+라이브 백업은 `pg_dump -Fc`를 사용한다. API를 중지한 유지보수 시간에 별도의 빈 DB로 `pg_restore`한 뒤 확인한다. API 이미지 교체와 DB 볼륨은 별도로 관리한다. 상세 명령과 복구 절차는 [운영 안내](../server/README.md)를 따른다.

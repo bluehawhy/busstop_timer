@@ -1,17 +1,17 @@
-PRAGMA foreign_keys = ON;
+
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
 CREATE TABLE IF NOT EXISTS stops (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  latitude REAL NOT NULL CHECK (latitude BETWEEN -90 AND 90),
-  longitude REAL NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+  latitude DOUBLE PRECISION NOT NULL CHECK (latitude BETWEEN -90 AND 90),
+  longitude DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
   provider_stop_id TEXT,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 CREATE INDEX IF NOT EXISTS stops_location_idx ON stops(latitude, longitude);
 
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',
   weekdays TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,7]',
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
   UNIQUE(user_id, stop_id, route_id)
 );
 CREATE INDEX IF NOT EXISTS subscriptions_user_enabled_idx ON subscriptions(user_id, enabled);
@@ -38,14 +38,14 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   platform TEXT NOT NULL CHECK (platform IN ('ios','android','web')),
   token TEXT NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
   UNIQUE(platform, token)
 );
 
 CREATE TABLE IF NOT EXISTS alert_events (
   id TEXT PRIMARY KEY,
   subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
-  eta_minutes REAL NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  eta_minutes DOUBLE PRECISION NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 CREATE INDEX IF NOT EXISTS alert_cooldown_idx ON alert_events(subscription_id, created_at);
