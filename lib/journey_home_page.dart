@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'services/journey_service.dart';
+import 'app_styles.dart';
 
 class JourneyHomePage extends StatefulWidget {
   const JourneyHomePage({super.key});
@@ -142,7 +143,52 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   }
   String _basis(dynamic basis) => switch(basis) { 'realtime' => '실시간', 'headway' => '배차 추정', _ => '시간표' };
   String _minutes(dynamic seconds) => '${((seconds as num)/60).ceil()}분';
-  Widget _card(Widget child) => Card(margin: const EdgeInsets.only(bottom: 16), child: Padding(padding: const EdgeInsets.all(20), child: child));
+  Widget _card(Widget child) => Card(margin: const EdgeInsets.only(bottom: 16), child: Padding(padding: const EdgeInsets.all(24), child: child));
+
+  Widget _heading(String title, String subtitle) => Padding(
+    padding: const EdgeInsets.only(bottom: 24),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: AppTextStyles.pageTitle),
+      const SizedBox(height: 8),
+      Text(subtitle, style: const TextStyle(color: AppColors.secondaryText, height: 1.6)),
+    ]),
+  );
+
+  Widget _notice(IconData icon, String title, String message) => Container(
+    margin: const EdgeInsets.only(bottom: 20),
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(22)),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, color: AppColors.primary), const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6), Text(message, style: const TextStyle(color: AppColors.secondaryText, height: 1.6)),
+      ])),
+    ]),
+  );
+
+  Widget _hero() => Container(
+    margin: const EdgeInsets.only(bottom: 24), padding: const EdgeInsets.all(26),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(colors: [AppColors.primaryDark, AppColors.primary], begin: Alignment.topLeft, end: Alignment.bottomRight),
+      borderRadius: BorderRadius.circular(28),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(20)),
+          child: const Text('매일의 이동을 가볍게', style: TextStyle(color: AppColors.primaryDark, fontSize: 12, fontWeight: FontWeight.w800))),
+        const Spacer(), const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 32),
+      ]),
+      const SizedBox(height: 24),
+      const Text('오늘은 어떤 길로 갈까요?', style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -0.8)),
+      const SizedBox(height: 10),
+      const Text('직행부터 환승까지, 나에게 맞는 경로를 찾아요.', style: TextStyle(color: Color(0xFFD7ECE8), height: 1.6)),
+      const SizedBox(height: 22),
+      const Row(children: [Icon(Icons.notifications_active_outlined, color: AppColors.accent, size: 19), SizedBox(width: 8),
+        Expanded(child: Text('승차·환승 버스 도착 5분 전 안내', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)))]),
+    ]),
+  );
 
   Future<void> _pickDeparture() async {
     final now = DateTime.now();
@@ -173,7 +219,8 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   }
 
   Widget _settings() => _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    const Text('서버 연결', style: TextStyle(fontSize: 22,fontWeight: FontWeight.bold)),
+    _heading('설정', '연결과 알림을 관리해요.'),
+    _notice(Icons.dns_outlined, _stops.isNotEmpty ? '서버 연결됨' : '서버에 연결해주세요', '개인 기기 토큰으로 나의 저장 경로와 이동 정보를 불러와요.'),
     const SizedBox(height: 12), TextField(controller: _base, decoration: const InputDecoration(labelText: '앱 서버 주소')),
     const SizedBox(height: 12), TextField(controller: _token, obscureText: true, decoration: const InputDecoration(labelText: '개인 기기 토큰')),
     const SizedBox(height: 12), FilledButton(onPressed: _busy ? null : _connect, child: const Text('연결')),
@@ -183,8 +230,8 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   ]));
 
   Widget _searchView() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    const Text('오늘은 어떤 길로 갈까요?', style: TextStyle(fontSize: 24,fontWeight: FontWeight.bold)),
-    const Text('직행과 환승, 출발 시간별 도착 시각을 비교하세요.'), const SizedBox(height: 16),
+    _hero(),
+    _heading('어디로 이동하시나요?', '출발지와 목적지를 선택하고 도착 시간을 비교해보세요.'),
     if (_stops.isEmpty) const Text('정류장 데이터가 없습니다. 서버의 교통 데이터 등록 상태를 확인해주세요.'),
     TextField(decoration: const InputDecoration(labelText: '정류장 이름 검색', suffixIcon: Icon(Icons.search)), onSubmitted: (q) => _run(() async {
       final result = await _api!.request('journey-stops?q=${Uri.encodeQueryComponent(q)}');
@@ -194,16 +241,16 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
     })),
     const SizedBox(height: 12),
     _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      DropdownButtonFormField<String>(key: ValueKey('origin-$_origin'), initialValue: _origin, isExpanded: true, decoration: const InputDecoration(labelText: '출발 정류장'),
+      DropdownButtonFormField<String>(key: ValueKey('origin-$_origin'), initialValue: _origin, isExpanded: true, decoration: const InputDecoration(labelText: '출발 정류장', prefixIcon: Icon(Icons.trip_origin, color: AppColors.primary)),
         items: _stops.map((s) => DropdownMenuItem(value: s['id'] as String, child: Text('${s['name']} (${s['id']})',overflow: TextOverflow.ellipsis))).toList(),
         onChanged: _busy ? null : (v) => setState(() => _origin = v)),
-      const SizedBox(height: 12), DropdownButtonFormField<String>(key: ValueKey('destination-$_destination'), initialValue: _destination,isExpanded: true,decoration: const InputDecoration(labelText: '목적 정류장'),
+      Align(alignment: Alignment.centerRight, child: IconButton(tooltip: '출발지와 목적지 바꾸기', onPressed: _busy ? null : () => setState(() { final previous = _origin; _origin = _destination; _destination = previous; }), icon: const Icon(Icons.swap_vert_rounded, color: AppColors.primary))), DropdownButtonFormField<String>(key: ValueKey('destination-$_destination'), initialValue: _destination,isExpanded: true,decoration: const InputDecoration(labelText: '목적 정류장', prefixIcon: Icon(Icons.location_on_outlined, color: AppColors.primary)),
         items: _stops.map((s) => DropdownMenuItem(value: s['id'] as String, child: Text('${s['name']} (${s['id']})',overflow: TextOverflow.ellipsis))).toList(),
         onChanged: _busy ? null : (v) => setState(() => _destination = v)),
-      const SizedBox(height: 12), OutlinedButton(onPressed: _busy ? null : _pickDeparture, child: Text('출발 ${_clock(_departure.toIso8601String())}')),
+      const SizedBox(height: 12), OutlinedButton(onPressed: _busy ? null : _pickDeparture, child: Text(_departNow ? '지금 출발 · 시간 변경' : '출발 ${_clock(_departure.toIso8601String())}')),
       TextButton(onPressed: () => setState(() { _departure = DateTime.now(); _departNow = true; }), child: const Text('지금 출발')),
       SegmentedButton<int>(segments: const [ButtonSegment(value: 0,label: Text('직행')),ButtonSegment(value: 1,label: Text('환승 1회')),ButtonSegment(value: 2,label: Text('환승 2회'))], selected: {_transfers}, onSelectionChanged: _busy ? null : (s) => setState(() => _transfers = s.first)),
-      const SizedBox(height: 16), FilledButton(onPressed: _busy ? null : _search, child: const Text('15분 간격으로 경로 비교')),
+      const SizedBox(height: 16), FilledButton(onPressed: _busy ? null : _search, child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.search_rounded), SizedBox(width: 8), Text('15분 간격으로 경로 비교')])),
       TextButton(onPressed: _busy || _origin == null || _destination == null ? null : _save, child: const Text('이 경로와 시간대 저장')),
     ])),
     for (final group in _comparisons) ...[
@@ -218,15 +265,25 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
     Text('${_clock(option['arrivalAt'])} 도착 · ${_minutes(option['durationSeconds'])}',style: const TextStyle(fontSize: 20,fontWeight: FontWeight.bold)),
     Text('환승 ${option['transfers']}회 · 대기 ${_minutes(option['waitSeconds'])} · 도보 ${_minutes(option['walkSeconds'])}'),
     for (final raw in option['legs'] as List) ...[
-      const Divider(), Text('${raw['fromStopName']} → ${raw['toStopName']}'),
-      Text('${raw['routeName']} · ${raw['direction']} · ${_clock(raw['departureAt'])} 승차'),
+      const Divider(),
+      Row(children: [
+        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.directions_bus_rounded, size: 18, color: Colors.white), const SizedBox(width: 6), Text('${raw['routeName']}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800))])),
+        const SizedBox(width: 10), Expanded(child: Text('${raw['direction']}', style: const TextStyle(color: AppColors.secondaryText))),
+      ]),
+      const SizedBox(height: 12),
+      Text('${raw['fromStopName']} → ${raw['toStopName']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 6),
+      Text('${_clock(raw['departureAt'])} 승차'),
       Text('${_basis(raw['basis'])} · 대기 ${_minutes(raw['waitSeconds'])} · 환승 도보 ${_minutes(raw['walkSeconds'])} · 여유 ${_minutes(raw['bufferSeconds'])}'),
     ],
     const SizedBox(height: 12), FilledButton(onPressed: _busy ? null : () => _start(option), child: const Text('이 버스 조합으로 이동 시작')),
   ]));
 
-  Widget _savedView() => Column(children: [
-    if (_saved.isEmpty) const Text('자주 가는 출퇴근·등하교 경로를 저장해보세요.'),
+  Widget _savedView() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    _heading('나의 저장 경로', '자주 가는 길, 매번 입력하지 않아도 돼요.'),
+    if (_saved.isEmpty) _notice(Icons.bookmark_border_rounded, '아직 저장한 경로가 없어요', '홈에서 출발지와 목적지를 선택한 뒤 경로와 시간대를 저장해주세요.'),
     for (final saved in _saved) _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch,children: [
       Text(saved['name'] as String,style: const TextStyle(fontSize: 20,fontWeight: FontWeight.bold)),
       Text('${saved['origin_stop_id']} → ${saved['destination_stop_id']} · ${saved['departure_time']} (한국 시간)'),
@@ -252,9 +309,14 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   ]);
 
   Widget _activeView() {
-    if (_session == null) return const Text('경로를 비교하고 이동을 시작해주세요.');
+    if (_session == null) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _heading('이동·알림', '승차부터 환승까지 함께할게요.'),
+      _notice(Icons.directions_bus_outlined, '아직 시작한 이동이 없어요', '홈에서 경로를 비교하고 이동을 시작하면 구간별 승차 정보를 확인할 수 있어요.'),
+      FilledButton(onPressed: () => setState(() => _tab = 0), child: const Text('이동 경로 찾기')),
+    ]);
     final session = _session!, option = session['option'] as Map<String,dynamic>;
     return _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch,children: [
+      _notice(Icons.notifications_active_rounded, '이동 중에도 놓치지 않도록', '각 구간의 버스 도착 5분 전에 안내해요. 알림 권한은 설정에서 켤 수 있어요.'),
       Text('이동 상태: ${switch(session['status']) {'waiting' => '첫 버스 대기', 'riding' => '탑승 중', 'transfer' => '환승 대기', 'disrupted' => '연결 재확인 필요', _ => session['status']}}',style: const TextStyle(fontSize: 22,fontWeight: FontWeight.bold)),
       Text('목적지 ${_clock(option['arrivalAt'])} 도착 예상'),
       for (var i=0;i<(option['legs'] as List).length;i++) ListTile(
@@ -272,17 +334,47 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
     ]));
   }
 
+  Widget _navigation(bool wide) {
+    const destinations = [
+      NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: '홈'),
+      NavigationDestination(icon: Icon(Icons.bookmark_border_rounded), selectedIcon: Icon(Icons.bookmark_rounded), label: '저장 경로'),
+      NavigationDestination(icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications_rounded), label: '이동·알림'),
+      NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: '설정'),
+    ];
+    if (!wide) return NavigationBar(selectedIndex: _tab, onDestinationSelected: (v) => setState(() => _tab = v), destinations: destinations);
+    return NavigationRail(
+      backgroundColor: AppColors.primaryDark, selectedIndex: _tab,
+      onDestinationSelected: (v) => setState(() => _tab = v),
+      labelType: NavigationRailLabelType.all, indicatorColor: AppColors.accent,
+      selectedIconTheme: const IconThemeData(color: AppColors.primaryDark),
+      unselectedIconTheme: const IconThemeData(color: Color(0xFFBDD7D3)),
+      selectedLabelTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      unselectedLabelTextStyle: const TextStyle(color: Color(0xFFBDD7D3)),
+      leading: const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Icon(Icons.directions_bus_rounded, color: AppColors.accent, size: 32)),
+      destinations: destinations.map((d) => NavigationRailDestination(icon: d.icon, selectedIcon: d.selectedIcon, label: Text(d.label))).toList(),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('버스 타이머'), actions: [IconButton(onPressed: () => setState(() => _tab = 3),icon: const Icon(Icons.settings))]),
-    body: SafeArea(child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 760),child: ListView(padding: const EdgeInsets.all(20),children: [
-      if (_busy) const LinearProgressIndicator(),
-      if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 16),child: Text(_error!,style: TextStyle(color: Theme.of(context).colorScheme.error))),
-      if (_api == null || _tab == 3) _settings() else switch(_tab) {0 => _searchView(),1 => _savedView(),_ => _activeView()},
-    ])))),
-    bottomNavigationBar: NavigationBar(selectedIndex: _tab,onDestinationSelected: (v) => setState(() => _tab = v),destinations: const [
-      NavigationDestination(icon: Icon(Icons.route),label: '홈'),NavigationDestination(icon: Icon(Icons.bookmark),label: '저장 경로'),
-      NavigationDestination(icon: Icon(Icons.notifications),label: '이동·알림'),NavigationDestination(icon: Icon(Icons.settings),label: '설정'),
-    ]),
-  );
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, constraints) {
+    final wide = constraints.maxWidth >= 900;
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 76,
+        title: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.directions_bus_rounded, color: AppColors.primary), SizedBox(width: 10), Text('버스 타이머', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 21))]),
+        actions: [Padding(padding: const EdgeInsets.only(right: 16), child: IconButton(tooltip: '설정', onPressed: () => setState(() => _tab = 3), icon: const Icon(Icons.settings_outlined)))],
+      ),
+      body: SafeArea(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (wide) _navigation(true),
+        Expanded(child: Center(child: ConstrainedBox(constraints: BoxConstraints(maxWidth: wide ? 920 : 760), child: ListView(
+          padding: EdgeInsets.all(wide ? 36 : 20), children: [
+            if (_busy) const Padding(padding: EdgeInsets.only(bottom: 16), child: LinearProgressIndicator()),
+            if (_error != null) Semantics(liveRegion: true, child: _notice(Icons.error_outline, '확인이 필요해요', _error!)),
+            if (_api == null || _tab == 3) _settings() else switch(_tab) {0 => _searchView(),1 => _savedView(),_ => _activeView()},
+          ],
+        )))),
+      ])),
+      bottomNavigationBar: wide ? null : _navigation(false),
+    );
+  });
 }

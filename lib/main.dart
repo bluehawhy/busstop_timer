@@ -27,6 +27,19 @@ class BusAlarmApp extends StatelessWidget {
         colorScheme: colorScheme,
         scaffoldBackgroundColor: AppColors.background,
         fontFamily: 'Pretendard',
+        textTheme: ThemeData.light().textTheme.apply(bodyColor: AppColors.ink, displayColor: AppColors.ink),
+        filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primary, foregroundColor: Colors.white,
+          minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        )),
+        outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primary, minimumSize: const Size(0, 48),
+          side: const BorderSide(color: AppColors.border),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        )),
+        dividerTheme: const DividerThemeData(color: AppColors.border, space: 28),
         appBarTheme: const AppBarTheme(
           backgroundColor: AppColors.background,
           foregroundColor: AppColors.ink,
