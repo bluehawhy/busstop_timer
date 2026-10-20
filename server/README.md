@@ -1,38 +1,105 @@
-# Ubuntu 앱 서버 + SQLite
+# Ubuntu 버스 서버 + 전용 PostgreSQL
 
-운영 주소: **https://app.bluewaikiki.top/bustimer/**. Node.js 24, SQLite, Flutter Web 정적 파일을 같은 서버에서 실행한다. 이전 Worker·D1 설정은 `legacy/`에 보관하며 새 기능의 배포 대상이 아니다.
+운영 주소: **https://app.bluewaikiki.top/bustimer/**. 버스 프로젝트의 Node.js 24 API와 PostgreSQL 16을 함께 실행한다. 다른 프로젝트의 PostgreSQL 컨테이너·볼륨은 사용하지 않는다.
 
-## 설치 및 배포
+- `bustimer`: API·Flutter Web 제공. 공통 Caddy에는 `bus-proxy`의 `bus-api:18082`로 연결한다.
+- `postgres`: 버스 전용 DB. 호스트 포트와 프록시 네트워크에 연결하지 않는다.
+- `postgres_data`: 이 Compose 프로젝트만 사용하는 영속 볼륨. API 이미지 교체 시 유지한다.
+- DB 관리자 `bustimer_admin`과 앱 계정 `bustimer`를 분리한다. API에는 관리자 비밀번호를 전달하지 않는다.
+- DB 네트워크는 `internal: true`다. API는 별도 기본 네트워크를 통해 교통 제공자에게 요청할 수 있다.
 
-저장소 루트에서 Flutter SDK로 웹을 빌드한다.
+## 최초 배포
+
+기존 버스 컨테이너가 있다면 Compose 프로젝트명·파일 목록과 DB 경로부터 확인한다. 아래 `busstop_timer`는 **신규 배포용 프로젝트명**이다. 기존 프로젝트명은 그대로 사용한다. 비어 있지 않은 SQLite DB가 있다면 먼저 아래 가져오기 절차를 따른다.
+
+저장소 루트에서 웹을 빌드한다. Flutter SDK가 없는 호스트에서는 다른 빌드 환경에서 동일 명령으로 생성한 `build/web`을 배치한다. 저장소의 `web/` 소스 디렉터리로 대체하면 안 된다.
 
 ```bash
 flutter pub get
 flutter build web --release --base-href /bustimer/ --dart-define=BUS_API_URL=https://app.bluewaikiki.top/bustimer
 cd server
-cp .env.example .env
-# .env의 API_BEARER_TOKEN을 충분히 긴 임의 값으로 수정한다.
-docker compose up -d --build
+cp -n .env.example .env
 ```
 
-외부에 직접 DB나 API 포트를 열지 않는다. `127.0.0.1:18082`만 공개하고 Caddy의 기존 `app.bluewaikiki.top` 블록에 `deploy/Caddyfile.snippet`을 추가한다. `handle_path`로 접두사를 제거하지 않는다. 다른 `/ledger/` 등 서비스 블록은 유지한다.
+`.env`의 `POSTGRES_ADMIN_PASSWORD`, `BUS_DB_PASSWORD`, `API_BEARER_TOKEN`을 각각 다른 임의 값으로 설정한다. 각 값은 `openssl rand -hex 32`로 생성할 수 있다. DB 비밀번호는 URL에 조합하므로 16진수 문자열을 사용한다. 기존 정상 토큰은 유지하고 실제 값은 커밋하지 않는다. `chmod 600 .env`로 권한을 제한한다.
+
+공통 Docker Caddy 구성에서는 Compose 2.24.4 이상이 필요하다. 프록시 overlay를 항상 마지막에 지정한다.
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-docker compose logs --tail 100 bustimer
-curl https://app.bluewaikiki.top/bustimer/health
+docker network inspect bus-proxy >/dev/null 2>&1 || docker network create bus-proxy
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml config --quiet
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --build --wait --wait-timeout 120
 ```
 
-Docker 없이 실행하려면 `server/`에서 Node 24로 `npm start`한다. 이 경우 기본 host는 127.0.0.1, DB는 `./data/bustimer.sqlite`, 웹은 `../build/web`다. 운영은 Docker의 `restart: unless-stopped`를 사용한다.
+기본 `compose.yaml`만 실행하면 API의 `127.0.0.1:18082`가 열리며, `compose.proxy.yaml`을 함께 지정하면 그 호스트 포트를 제거한다. PostgreSQL은 어느 구성에서도 호스트에 공개하지 않는다. 기본 예제의 실제 `.env` 값이나 `docker compose config` 전체 출력은 공유하지 않는다.
+
+`deploy/init-postgres.sh`는 새 볼륨 최초 초기화 때만 DB·역할을 만든다. 기존 볼륨에서 `.env` 비밀번호만 바꾸면 DB 비밀번호는 변경되지 않는다. 비밀번호 변경 시 DB 역할의 비밀번호와 `.env`를 함께 변경한다. 초기화 도중 오류가 나면 로그를 확인하고, 데이터가 있는 볼륨을 삭제해 복구하지 않는다.
+
+## 공통 Caddy 연결
+
+실행 중인 공통 Caddy 내부에서 먼저 확인한다.
+
+```bash
+cd /home/mins/source/bluewaikiki_api_server
+docker compose -f compose.proxy.yaml exec -T caddy wget -qO- http://bus-api:18082/bustimer/health
+```
+
+`proxy/local/caddy/Caddyfile`의 기존 버스 블록을 아래 upstream으로 바꾼다. 기존 `unix//run/host-relay/bus.sock` 또는 `127.0.0.1:18082`의 버스 upstream을 대체한다. 다른 서비스 블록은 유지한다.
+
+```caddyfile
+handle /bustimer/* {
+    reverse_proxy bus-api:18082
+}
+```
+
+`handle_path`로 `/bustimer` 접두사를 제거하지 않는다. 설정 검증 뒤 reload한다.
+
+```bash
+docker compose -f compose.proxy.yaml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
+docker compose -f compose.proxy.yaml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+curl --fail --show-error https://app.bluewaikiki.top/bustimer/health
+```
+
+버스 연결이 확인되면 다음 유지보수 때 host-relay의 `HOST_RELAY_TARGETS`에서 `bus:18082`만 제외할 수 있다. 다른 relay 항목은 계속 사용한다. 프로젝트 업데이트 때도 위의 프로젝트명과 Compose 파일 목록을 유지한다.
+
+## 기존 SQLite 데이터 가져오기
+
+서버를 가동하기 전에 실행하는 선택 절차다. SQLite 자동 대체나 자동 삭제는 하지 않는다. D1 원격 DB를 직접 읽는 도구는 아니다.
+
+1. SQLite를 쓰던 API를 중지한다. DB·WAL·SHM을 포함한 안전한 백업 또는 SQLite backup API로 만든 스냅샷을 별도 경로에 보관한다.
+2. 새 이미지와 PostgreSQL만 준비한다. 기존 컨테이너를 교체하기 전 현재 이미지 ID, Compose 파일과 `.env`도 보관한다.
+
+```bash
+cd /home/mins/source/busstop_timer/server
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml build bustimer
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --wait postgres
+```
+
+3. 원본 SQLite 디렉터리를 읽기 전용으로 마운트하고 가져온다. `/absolute/path/to/sqlite-backup`과 DB 파일명은 실제 백업에 맞춘다.
+
+```bash
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml run --rm --no-deps \
+  -v /absolute/path/to/sqlite-backup:/sqlite-source:ro \
+  bustimer node src/import-sqlite.js /sqlite-source/bustimer.sqlite
+```
+
+가져오기는 알려진 테이블을 외래키 순서로 복사하고, 토큰 해시·ID·구독·이동 세션·알림을 보존한다. 대상 테이블이 하나라도 비어 있지 않으면 중단한다. 알 수 없는 열이나 제약 위반도 중단하고 전체 복사를 롤백한다. SQLite는 읽기 전용 스냅샷으로 읽으며 테이블별 행 수를 확인한다. 일부 테이블이 없는 이전 스키마도 알려진 테이블 범위에서 처리하지만, 원본과 다른 스키마를 임의로 변환하지 않는다. PostgreSQL의 마이그레이션 이력은 새로 생성한다.
+
+4. 정상 완료 후 API를 시작하고 기기 토큰·저장 경로·구독과 프록시 응답을 확인한다. **기존 SQLite 파일은 보관한다.**
+
+```bash
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --wait bustimer
+```
+
+되돌릴 때는 API를 중지하고 보관한 이전 이미지·Compose·환경 설정 및 SQLite 백업으로 복구한다. 전환 후 PostgreSQL에 새로 저장된 데이터는 SQLite로 자동 역이관되지 않는다. 새 PostgreSQL 볼륨도 삭제하지 않는다.
 
 ## DB와 기기 등록
 
-시작 시 파일별 트랜잭션 마이그레이션이 자동 적용된다. 기존 구독 테이블은 삭제하지 않는다. D1에 있던 데이터를 Ubuntu로 자동 복사하지는 않는다.
+시작 시 PostgreSQL 마이그레이션을 트랜잭션으로 적용한다. 동시에 기동하는 경우에도 마이그레이션을 직렬화한다. SQLite/D1 데이터는 자동 복사하지 않는다. 아래 SQLite 가져오기 절차는 필요할 때만 별도로 실행한다.
 
 ```bash
 cd server
-docker compose exec bustimer node src/server.js create-device minsu phone
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml exec bustimer node src/server.js create-device minsu phone
 ```
 
 출력된 개인 토큰은 해당 사용자에게만 전달하고 앱의 설정 화면에 입력한다. 토큰 원문은 재조회할 수 없다. 관리자 토큰은 앱에 입력하지 않는다. 생성한 기기를 철회하려면 해당 사용자의 `api_devices` 행을 삭제한다.
@@ -66,16 +133,16 @@ docker compose exec bustimer node src/server.js create-device minsu phone
 - 실제 지역 공급자와 Ubuntu 접속 자격증명이 제공되지 않아 라이브 데이터 연결과 실제 서버 배포는 수행되지 않았다.
 - 신규 기능의 상세 내용: [상세설계](../docs/DETAILED_DESIGN.md), [DB 설계](../docs/DATABASE_DESIGN.md).
 
-## 백업
+## 백업 및 복구
 
-볼륨 `server/data`를 유지한다. 실행 중 백업은 sqlite3 `.backup`을 사용하거나 서비스를 중단한 뒤 DB를 복사한다. 서버 재시작·이미지 교체 시 `docker compose down -v`나 data 디렉터리 삭제를 하지 않는다. 장애 시 `docker compose logs`와 `/bustimer/health`로 확인한다.
+버스 프로젝트 디렉터리에서 실행한다. `pg_dump`는 운영 중 일관된 논리 백업을 만든다. 예시는 현재 디렉터리에 파일을 저장하므로 별도 저장 장치에도 보관한다. 실패한 dump 파일은 유효한 백업으로 취급하지 않는다.
 
-## 공통 Docker Caddy 연결 (선택 적용)
+```bash
+umask 077
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml exec -T postgres \
+  pg_dump -U bustimer_admin -d bustimer -Fc > bustimer-$(date +%Y%m%d-%H%M%S).dump
+```
 
-공통 게이트웨이로 전환할 때만 `server/compose.proxy.yaml`을 기존 Compose 파일 목록의 마지막에 추가합니다. `bustimer`의 호스트 포트를 제거하고 외부 `bus-proxy` 네트워크에서 `bus-api:18082`로 접근합니다. Node 서버의 내부 포트와 `/bustimer` 접두사는 그대로 유지합니다. Caddy는 `handle /bustimer/*`을 사용하며 `handle_path`로 접두사를 제거하지 않습니다.
+복구는 API를 중지하고 **별도의 빈 PostgreSQL DB**에 `pg_restore --exit-on-error --no-owner --no-acl`로 수행한 뒤 검증하고 전환한다. 앱 계정이 복구된 테이블을 소유하도록 `--role=bustimer`를 지정한다. 운영 DB를 대상으로 한 `--clean`, `docker compose down -v`, 볼륨 삭제는 일반 업데이트 절차에 포함하지 않는다.
 
-Docker Compose 2.24.4 이상이 필요합니다. 적용 전에 공통 서버에서 `bus-proxy`를 생성하고, 기존 프로젝트명과 모든 운영 Compose/override 파일을 확인합니다. 기존 bind 데이터 경로와 프로젝트명을 유지하여 DB를 보존합니다. 프록시 파일은 기본 설정에 자동 적용되지 않으며 PR 병합만으로 운영 포트가 바뀌지 않습니다.
-
-실제 포트 제거는 호스트 Caddy에서 Docker Caddy로 전환하는 유지보수 구간에 실행합니다. 먼저 기존 포트를 남긴 상태에서 내부 DNS와 `/bustimer/health` 응답을 확인합니다. 적용 후 CLI 업데이트도 모든 기존 Compose 파일과 마지막 프록시 파일을 함께 사용합니다. 되돌릴 때는 프록시 파일만 제외하고 동일 프로젝트/서비스를 재생성합니다.
-
-전체 절차: [공통 프록시 구성](https://github.com/bluehawhy/bluewaikiki_api_server/blob/main/proxy/README.md).
+장애 시 `docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml logs --tail 100 bustimer postgres`로 확인한다. `/bustimer/health`는 실제 DB 쿼리도 확인하므로 DB 연결이 끊기면 성공으로 응답하지 않는다.

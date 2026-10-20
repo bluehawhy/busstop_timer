@@ -6,12 +6,68 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:18082:18082"
-    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://bustimer:${BUS_DB_PASSWORD:?Set BUS_DB_PASSWORD in server/.env}@postgres:5432/bustimer
+      BASE_PATH: /bustimer
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://app.bluewaikiki.top}
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:?Set API_BEARER_TOKEN in server/.env}
+      BUS_ARRIVALS_URL: ${BUS_ARRIVALS_URL:-}
+      BUS_API_KEY: ${BUS_API_KEY:-}
+      MAX_LOCATION_ACCURACY_METERS: ${MAX_LOCATION_ACCURACY_METERS:-100}
+      DEFAULT_RADIUS_METERS: ${DEFAULT_RADIUS_METERS:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - ./data:/data
-      - ../build/web:/app/web:ro
+      - type: bind
+        source: ../build/web
+        target: /app/web
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - database
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18082/bustimer/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     init: true
     logging:
       options:
         max-size: "10m"
         max-file: "3"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: bustimer_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in server/.env}
+      BUS_DB_PASSWORD: ${BUS_DB_PASSWORD:?Set BUS_DB_PASSWORD in server/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/init-postgres.sh:/docker-entrypoint-initdb.d/10-bustimer.sh:ro
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U bustimer_admin -d bustimer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    stop_grace_period: 1m
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+
+networks:
+  database:
+    internal: true

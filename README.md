@@ -30,7 +30,7 @@ a·b·c·d·e 각각의 도착 시각과 이후 차량을 고려합니다. 첫 �
 ## 배포 및 설계
 
 - 웹: https://app.bluewaikiki.top/bustimer/
-- Ubuntu 앱 서버 + SQLite: [설치·운영 안내](server/README.md)
+- Ubuntu 앱 서버 + 프로젝트 전용 PostgreSQL: [설치·운영 안내](server/README.md)
 - [상세설계](docs/DETAILED_DESIGN.md) · [DB 구조](docs/DATABASE_DESIGN.md)
 
 ## 기획 및 디자인

@@ -7,9 +7,13 @@
     "test": "node --test",
     "start": "node src/server.js",
     "db:migrate": "node src/migrate.js",
-    "device:create": "node src/server.js create-device"
+    "device:create": "node src/server.js create-device",
+    "db:import-sqlite": "node src/import-sqlite.js"
   },
   "engines": {
     "node": ">=24"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
   }
 }
