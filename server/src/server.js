@@ -5,6 +5,8 @@ import { resolve, extname, sep } from 'node:path';
 import { openDatabase, legacyDatabase } from './database.js';
 import { journeyApi, evaluateSession } from './journeys.js';
 import legacy from './index.js';
+import { busApi } from './bus-api.js';
+import { collectSavedArrivals } from './bus-history.js';
 import { ApiError } from './planner.js';
 
 const db=await openDatabase();
@@ -63,7 +65,8 @@ const server=createServer(async(req,res)=>{
       ...(['GET','HEAD'].includes(req.method)?{}:{body})});
     // New endpoints derive user ownership from a device token, never request userId.
     if(admin) await db.prepare('INSERT INTO users(id) VALUES($1) ON CONFLICT DO NOTHING').run('admin');
-    let response=await journeyApi(request,db,device?.user_id??'admin',admin,path);
+    let response=await busApi(request,db,device?.user_id??'admin',admin,path);
+    if(!response) response=await journeyApi(request,db,device?.user_id??'admin',admin,path);
     if(!response&&admin) response=await legacy.fetch(request,{...process.env,DB:legacyDatabase(db)});
     if(!response) throw new ApiError('NOT_FOUND',404);
     const headers=Object.fromEntries(response.headers);
@@ -92,10 +95,20 @@ const timer=setInterval(async()=>{
   }catch(e){console.error('Journey evaluation failed:',e.message);}
   finally{evaluating=false;}
 },15000);
+let collecting=false;
+async function collect() {
+  if(collecting) return;
+  collecting=true;
+  try { await collectSavedArrivals(db); }
+  catch(error) { console.error('Bus collection failed:',error.code ?? 'UNKNOWN'); }
+  finally { collecting=false; }
+}
+let pendingCollection=collect();
+const busTimer=setInterval(()=>{if(!collecting) pendingCollection=collect();},60000);
 let stopping=false;
 function shutdown(){
   if(stopping) return;
-  stopping=true;clearInterval(timer);
-  server.close(async()=>{await db.close();});
+  stopping=true;clearInterval(timer);clearInterval(busTimer);
+  server.close(async()=>{await pendingCollection;await db.close();});
 }
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
