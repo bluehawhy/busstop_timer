@@ -1,19 +1,22 @@
 import { ApiError } from './planner.js';
+import { fetchBusanArrivals } from './busan-provider.js';
 
 const number = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 export function providerName(env) {
-  return env.BUS_PROVIDER === 'tago' ? 'tago' : 'normalized';
+  return ['busan','tago'].includes(env.BUS_PROVIDER) ? env.BUS_PROVIDER : 'normalized';
 }
 export function providerKey(stop, env = process.env) {
   return `${providerName(env)}:${stop.provider_city_code ?? ''}:${stop.provider_stop_id || stop.id}`;
 }
 export function providerConfigured(env) {
+  if (env.BUS_PROVIDER === 'busan') return Boolean(env.BUSAN_SERVICE_KEY?.trim());
   return env.BUS_PROVIDER === 'tago' ? Boolean(env.TAGO_SERVICE_KEY) : Boolean(env.BUS_ARRIVALS_URL);
 }
 
 // All URLs come from server configuration, never client input.
 export async function fetchBusArrivals(stop, env = process.env) {
   if (!providerConfigured(env)) throw new ApiError('BUS_PROVIDER_NOT_CONFIGURED', 503);
+  if (providerName(env) === 'busan') return fetchBusanArrivals(stop,env);
   const tago = providerName(env) === 'tago';
   if (tago && (!stop.provider_stop_id || !/^\d{1,8}$/.test(stop.provider_city_code ?? ''))) {
     throw new ApiError('STOP_PROVIDER_MAPPING_REQUIRED', 409);

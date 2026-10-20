@@ -214,3 +214,28 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 ```
 
 이후 개인 기기 토큰으로 정류소 검색 → 노선 조회 → 구독 저장 → 도착정보 조회 순서로 확인한다. `/health`는 DB 연결만 확인하며 공급자 연결 성공을 뜻하지 않는다. 키 미설정은 `providerStatus=not_configured`, 매핑 누락·상한·공급자 장애는 각각 상태 코드로 표시하며 추정 표본이 없으면 `unavailable`이다. 운영 키가 없는 개발 환경에서는 실제 공급자 통신과 PostgreSQL 수집 결과를 확인할 수 없다.
+
+### 부산 BIMS 연결과 정류소 자동 매핑
+
+[부산광역시 부산버스정보시스템](https://www.data.go.kr/data/15092750/openapi.do)의 XML API를 지원한다. `BUS_PROVIDER=busan`, `BUSAN_SERVICE_KEY`를 서버 `.env`에 지정한다. 포털의 URL 인코딩 키와 디코딩 키를 모두 허용하고 요청할 때 한 번만 인코딩한다. 키는 앱·GitHub·로그에 넣지 않는다.
+
+기존 서버 `.env`가 있는 경우 저장소 루트에서 다음 설정 도우미를 실행한다. 입력은 화면에 표시되지 않으며 기존 DB 비밀번호와 개인 기기 토큰을 유지한다. 인증키를 명령줄 인수로 넣지 않는다.
+
+```bash
+bash server/deploy/configure-busan.sh
+cd server
+docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --build --wait bustimer
+```
+
+실제 서버 인증키는 위 명령으로 운영 서버에 입력해야 한다. 이 저장소에 인증키 원문은 포함하지 않는다.
+
+1. `GET /api/bus/stops/search?q=부산시청` 또는 `?arsNo=13708`: 부산 `busStopList`를 조회하고 이름·위경도·정류소 ID(`bstopid`)·ARS 번호를 PostgreSQL에 자동 upsert한다. `page`는 1부터 시작하며 페이지당 100개다. 반환된 `totalCount`를 보고 필요한 다음 페이지만 요청한다. 정류소명 검색은 2~50자, ARS 번호는 앞자리 0을 보존한 5자리 문자열이다.
+2. 검색 결과 `id`(형식 `busan-<bstopid>`)로 `GET /api/bus/routes?stopId=...`를 조회한다. 서버는 `stopArrByBstopid`의 노선ID(`lineid`), 버스번호(`lineno`), 앞차·뒷차 정보를 받아 공통 캐시에 저장한다. 숫자 대기시간이 없어도 공급자 응답에 노선이 있으면 저장 가능한 노선 목록에 유지한다.
+3. 반환된 `routeId`(형식 `busan-<lineid>`)와 정류소 `id`를 `POST /api/bus/subscriptions`로 저장한다. 앱은 ARS 번호나 표시용 버스번호를 내부 ID 대신 사용하지 않는다. 부산 자동 검색 결과에는 별도 TAGO 도시코드/수동 매핑이 필요 없다.
+4. `GET /api/bus/arrivals?stopId=...`로 첫·다음 버스의 실시간 대기시간을 조회한다. 저장한 노선은 기존 백그라운드 수집과 90일 이력 기반 추정을 그대로 사용한다.
+
+`min1`, `min2`의 **분**을 내부 초 단위로 변환하고 `station1`, `station2`를 남은 정류소 수로 반환한다. `arrivalSequence=1/2`는 앞차/뒷차를 뜻한다. `운행대기`, 정보없음, 빈 필드는 0분으로 변환하지 않는다. 앞차 정보가 없고 뒷차만 숫자일 때 그 값을 앞차 학습 표본으로 사용하지 않는다. XML 파싱 시 DTD/사용자 정의 엔터티를 거부하고 응답 크기를 제한한다.
+
+부산 노선/정류소에는 `busan-` 접두사를 붙여 TAGO·수동 카탈로그 ID와 충돌을 줄인다. 노선 목록은 부산 응답에 포함된 노선과 DB 카탈로그를 합친 결과이며 공급자 누락까지 보완하는 전체 노선 DB 동기화는 아니다. 첫/다음 차량이 모두 없으면 실시간 숫자 도착값을 만들지 않고 이력 추정 또는 자료 부족으로 반환한다. 좌표는 정류소 좌표이며 사용자의 위치 추적 구조는 변경하지 않는다.
+
+공급자 검색과 도착정보 수집은 같은 일일 호출 상한을 공유한다. 성공 외 결과코드, XML 오류와 통신 장애는 구분된 오류로 처리한다. 운영 키 검증은 실제 공급자 통신이 가능한 서버에서 확인해야 한다.

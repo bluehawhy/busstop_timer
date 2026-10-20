@@ -1,4 +1,5 @@
 import { ApiError } from './planner.js';
+import { reserveProviderRequest } from './bus-quota.js';
 import { fetchBusArrivals, providerConfigured, providerKey } from './bus-provider.js';
 
 export async function refreshStop(db, stop, env = process.env) {
@@ -9,12 +10,7 @@ export async function refreshStop(db, stop, env = process.env) {
     WHERE stop_id=$1 AND next_attempt_at<=now() RETURNING stop_id`).get(stop.id);
   if (!lease) return 'cached';
   try {
-    const configuredLimit = Number(env.BUS_PROVIDER_DAILY_LIMIT ?? 9000);
-    const limit = Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 9000;
-    const quota = await db.prepare(`INSERT INTO bus_provider_daily_usage(day,requests)
-      VALUES((now() AT TIME ZONE 'Asia/Seoul')::date,1) ON CONFLICT(day) DO UPDATE
-      SET requests=bus_provider_daily_usage.requests+1 WHERE bus_provider_daily_usage.requests<$1 RETURNING requests`).get(limit);
-    if (!quota) throw new ApiError('BUS_PROVIDER_DAILY_LIMIT', 503);
+    await reserveProviderRequest(db,env);
     const feed = await fetchBusArrivals(stop, env);
     await db.transaction(async () => {
       // Only stored stop/route subscriptions train the history; never model output.
@@ -27,7 +23,7 @@ export async function refreshStop(db, stop, env = process.env) {
         ranks.set(row.routeId, rank);
         if (!routeIds.has(row.routeId)) continue;
         records.push({route_id:row.routeId,observed_at:row.observedAt,expected_at:row.expectedAt,
-          eta_seconds:row.etaSeconds,arrival_rank:rank});
+          eta_seconds:row.etaSeconds,arrival_rank:row.arrivalSequence??rank});
       }
       if (records.length) await db.prepare(`INSERT INTO bus_arrival_observations
         (stop_id,route_id,observed_at,fetched_at,expected_at,eta_seconds,arrival_rank,provider,provider_key)
@@ -35,8 +31,8 @@ export async function refreshStop(db, stop, env = process.env) {
         FROM jsonb_to_recordset($5::jsonb) AS x(route_id text,observed_at timestamptz,
           expected_at timestamptz,eta_seconds integer,arrival_rank integer)
         ON CONFLICT DO NOTHING`).run(stop.id,feed.fetchedAt,feed.provider,providerKey(stop,env),JSON.stringify(records));
-      await db.prepare(`UPDATE bus_arrival_cache SET fetched_at=$1,payload=$2::jsonb,status='ok',provider_key=$4 WHERE stop_id=$3`)
-        .run(feed.fetchedAt,JSON.stringify(feed.arrivals),stop.id,providerKey(stop,env));
+      await db.prepare(`UPDATE bus_arrival_cache SET fetched_at=$1,payload=$2::jsonb,status='ok',provider_key=$4,routes=$5::jsonb WHERE stop_id=$3`)
+        .run(feed.fetchedAt,JSON.stringify(feed.arrivals),stop.id,providerKey(stop,env),JSON.stringify(feed.routes??feed.arrivals.map(r=>({routeId:r.routeId,routeName:r.routeName,direction:null}))));
     });
     return 'ok';
   } catch (error) {

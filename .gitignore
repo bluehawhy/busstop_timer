@@ -48,3 +48,6 @@ app.*.map.json
 server/data/
 server/.env
 *.sqlite*
+
+# Node API dependencies
+node_modules/
