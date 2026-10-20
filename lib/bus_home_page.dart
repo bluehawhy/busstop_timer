@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_styles.dart';
 import 'bus_data_service.dart';
+import 'journey_home_page.dart';
+import 'widgets/stop_map_preview.dart';
 
 class BusHomePage extends ConsumerStatefulWidget {
   const BusHomePage({super.key});
@@ -17,6 +19,8 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   final Map<String, String> _alertLeadByBus = {};
   bool _previewNotifications = true;
   bool _locationPreview = false;
+  bool _favoritesOnly = false;
+  final Set<String> _favorites = {};
 
   static const _destinations = [
     _Destination('홈', Icons.home_rounded),
@@ -170,222 +174,54 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   }
 
   Widget _homePage(List<BusArrivalInfo> buses) {
-    final nextBus = buses.isEmpty ? null : buses.first;
-    return _pageFrame(
-      title: '좋은 하루예요!',
-      subtitle: '내 정류장 주변 버스 도착 정보를 확인해요.',
-      trailing: IconButton(
-        tooltip: '알림',
-        onPressed: () => setState(() => _selectedIndex = 2),
-        icon: const Icon(Icons.notifications_none_rounded),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _locationMapCard(),
-          const SizedBox(height: 22),
-          _sectionTitle('곧 도착하는 버스', action: '전체 보기', onAction: () {
-            setState(() => _selectedIndex = 1);
-          }),
+    final sorted = [...buses]..sort((a, b) => a.etaSeconds.compareTo(b.etaSeconds));
+    final nextBus = sorted.isEmpty ? null : sorted.first;
+    return LayoutBuilder(builder: (context, constraints) {
+      final wide = constraints.maxWidth >= 760;
+      final panel = Container(
+        padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
+        decoration: const BoxDecoration(color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Center(child: Container(width: 42, height: 5, margin: const EdgeInsets.only(bottom: 18),
+            decoration: BoxDecoration(color: AppColors.inactive.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(4)))),
+          const Text('내 정류장', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Row(children: [Expanded(child: Text(nextBus?.station ?? '정류장을 등록해주세요', style: AppTextStyles.pageTitle.copyWith(fontSize: 23))),
+            IconButton(tooltip: '정류장 찾기', onPressed: _openStopSearch, icon: const Icon(Icons.expand_more_rounded))]),
+          const Text('지도·도착정보 미리보기', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+          const Divider(height: 28),
+          _sectionTitle('곧 도착하는 버스', action: '더보기', onAction: () => setState(() => _selectedIndex = 1)),
           const SizedBox(height: 12),
-          if (nextBus == null)
-            _emptyBusesCard()
-          else
-            _upcomingBusCard(nextBus),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: _quickAction(
-                  icon: Icons.add_location_alt_outlined,
-                  title: '정류장 찾기',
-                  subtitle: '주변 정류장 등록',
-                  onTap: _openStopSearch,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _quickAction(
-                  icon: Icons.alarm_outlined,
-                  title: '알림 시간',
-                  subtitle: '요일과 시간 설정',
-                  onTap: () => setState(() => _selectedIndex = 2),
-                ),
-              ),
-            ],
-          ),
+          if (nextBus == null) _emptyBusesCard() else _upcomingBusCard(nextBus),
+          const SizedBox(height: 14),
+          FilledButton.icon(onPressed: _openStopSearch, icon: const Icon(Icons.add_circle_outline), label: const Text('정류장 등록')),
+        ]),
+      );
+      return Stack(children: [
+        Positioned.fill(child: StopMapPreview(
+          route: nextBus?.busNum, arrival: nextBus?.remain,
+          onBusTap: nextBus == null ? null : () => _openArrival(nextBus))),
+        Positioned(top: 22, left: 22, right: 22, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('좋은 하루예요!', style: AppTextStyles.pageTitle),
+          const SizedBox(height: 4),
+          const Text('지금, 버스가 곧 도착해요.', style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
           const SizedBox(height: 18),
-          _demoDataNote(),
-        ],
-      ),
-    );
-  }
-
-  Widget _locationMapCard() {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: 245,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(painter: _MapStreetPainter()),
-                ),
-                Positioned(
-                  top: 14,
-                  left: 14,
-                  child: _smallMapLabel(
-                    _locationPreview ? '위치 미리보기' : '지도 미리보기',
-                    Icons.map_outlined,
-                  ),
-                ),
-                Center(
-                  child: Container(
-                    width: 166,
-                    height: 166,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.primary.withValues(alpha: 0.10),
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.55),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Center(
-                      child: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 4),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x22000000),
-                              blurRadius: 10,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.directions_bus_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 34,
-                  bottom: 44,
-                  child: _mapPin(Icons.my_location_rounded, Colors.white),
-                ),
-                Positioned(
-                  right: 28,
-                  top: 84,
-                  child: _mapPin(Icons.directions_bus_rounded, AppColors.accent),
-                ),
-                Positioned(
-                  right: 14,
-                  bottom: 14,
-                  child: _smallMapLabel('30m', Icons.radar_rounded),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.location_on_rounded,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '내 정류장',
-                        style: TextStyle(
-                          color: AppColors.ink,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                      Text(
-                        '정류장을 등록하면 주변 정보를 표시해요',
-                        style: TextStyle(
-                          color: AppColors.secondaryText,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: _openStopSearch,
-                  child: const Text('찾기'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _smallMapLabel(String label, IconData icon) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 15, color: AppColors.primary),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.ink,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _mapPin(IconData icon, Color color) {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.primary, width: 2),
-      ),
-      child: Icon(icon, color: AppColors.primary, size: 17),
-    );
+          Row(children: [Expanded(child: Material(color: Colors.white, borderRadius: BorderRadius.circular(28), elevation: 2,
+            child: InkWell(borderRadius: BorderRadius.circular(28), onTap: _openStopSearch,
+              child: const Padding(padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                child: Row(children: [Icon(Icons.search, color: AppColors.secondaryText), SizedBox(width: 10),
+                  Expanded(child: Text('정류장이나 버스 번호를 검색하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 13)))]))))),
+            const SizedBox(width: 10), IconButton.filled(tooltip: '지도 안내', onPressed: () => _showMessage('지도 미리보기', '지도를 확대하거나 이동할 수 있어요. 실제 위치·정류장 좌표 연결은 추후 적용됩니다.'),
+              icon: const Icon(Icons.my_location_rounded))]),
+        ])),
+        if (wide) Positioned(left: 24, bottom: 24, width: 390, child: ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.6), child: SingleChildScrollView(child: panel)))
+        else DraggableScrollableSheet(initialChildSize: 0.42, minChildSize: 0.25, maxChildSize: 0.78,
+          builder: (context, controller) => Container(
+            decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+            child: SingleChildScrollView(controller: controller, child: panel))),
+      ]);
+    });
   }
 
   Widget _upcomingBusCard(BusArrivalInfo bus) {
@@ -414,7 +250,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '다음 버스 · ${bus.nextBus ?? '도착 임박'}',
+                      '다음 버스 · ${bus.nextBus ?? '정보 없음'}',
                       style: const TextStyle(
                         color: AppColors.secondaryText,
                         fontSize: 12,
@@ -445,11 +281,19 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
         icon: const Icon(Icons.add_rounded),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SegmentedButton<bool>(segments: const [
+            ButtonSegment(value: true, icon: Icon(Icons.star_rounded), label: Text('즐겨찾기')),
+            ButtonSegment(value: false, label: Text('전체')),
+          ], selected: {_favoritesOnly}, onSelectionChanged: (values) => setState(() => _favoritesOnly = values.first)),
+          const SizedBox(height: 18),
+          if (_favoritesOnly && !buses.any((b) => _favorites.contains(b.id)))
+            const Padding(padding: EdgeInsets.all(24), child: Text('버스 카드의 별을 눌러 즐겨찾기에 추가해보세요.', textAlign: TextAlign.center)),
           if (buses.isEmpty)
             _emptyBusesCard()
           else
-            ...buses.map(
+            ...buses.where((bus) => !_favoritesOnly || _favorites.contains(bus.id)).map(
               (bus) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Dismissible(
@@ -470,7 +314,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                       SnackBar(content: Text('${bus.busNum}번 버스를 삭제했어요.')),
                     );
                   },
-                  child: _registeredBusCard(bus),
+                  child: InkWell(borderRadius: BorderRadius.circular(22), onTap: () => _openArrival(bus), child: _registeredBusCard(bus)),
                 ),
               ),
             ),
@@ -503,6 +347,9 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                     ],
                   ),
                 ),
+                IconButton(tooltip: '즐겨찾기', onPressed: () => setState(() {
+                  _favorites.contains(bus.id) ? _favorites.remove(bus.id) : _favorites.add(bus.id);
+                }), icon: Icon(_favorites.contains(bus.id) ? Icons.star_rounded : Icons.star_outline_rounded, color: AppColors.primary)),
                 Switch.adaptive(
                   value: enabled,
                   activeTrackColor: AppColors.primary,
@@ -664,6 +511,13 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
             ],
           ),
           const SizedBox(height: 14),
+          _settingsGroup(children: [
+            _settingsRow(icon: Icons.route_rounded, title: '경로 검색·서버 연결',
+              subtitle: '기존 토큰 연결과 경로 비교 화면',
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const JourneyHomePage()))),
+          ]),
+          const SizedBox(height: 14),
           _infoCallout(
             icon: Icons.shield_outlined,
             title: '위치 정보 안내',
@@ -782,39 +636,6 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
     );
   }
 
-  Widget _quickAction({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Row(
-            children: [
-              Icon(icon, color: AppColors.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(color: AppColors.ink, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 3),
-                    Text(subtitle, style: const TextStyle(color: AppColors.secondaryText, fontSize: 11)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _sectionTitle(String title, {String? action, VoidCallback? onAction}) {
     return Row(
       children: [
@@ -885,7 +706,8 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   }
 
   Widget _etaPill(String eta) {
-    final soon = eta.contains('곧') || eta.startsWith('1') || eta.startsWith('2') || eta.startsWith('3');
+    final minutes = int.tryParse(RegExp(r'^(\d+)분').firstMatch(eta)?.group(1) ?? '');
+    final soon = eta.contains('곧') || (minutes != null && minutes <= 5);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
@@ -1032,9 +854,9 @@ class ArrivalAlertPage extends StatelessWidget {
                   const Text('버스 도착 알림', style: TextStyle(color: Colors.white70, fontSize: 15)),
                   const SizedBox(height: 8),
                   Text(
-                    '${bus.remain} 후 도착',
+                    bus.remain.contains('곧') ? '곧 도착' : '${bus.remain} 후 도착',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
+                    style: const TextStyle(color: AppColors.accent, fontSize: 42, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1304,68 +1126,4 @@ class _Destination {
   const _Destination(this.label, this.icon);
   final String label;
   final IconData icon;
-}
-
-class _MapStreetPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final park = Paint()..color = const Color(0xFFE7F0DF);
-    final water = Paint()..color = const Color(0xFFDDEEF0);
-    final road = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..strokeWidth = 18
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final roadEdge = Paint()
-      ..color = const Color(0xFFD9E0D9)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFF0F2E9));
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.04, size.height * 0.08, size.width * 0.23, size.height * 0.24),
-        const Radius.circular(24),
-      ),
-      park,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.73, size.height * 0.57, size.width * 0.22, size.height * 0.28),
-        const Radius.circular(24),
-      ),
-      park,
-    );
-    final river = Path()
-      ..moveTo(size.width * 0.86, 0)
-      ..cubicTo(size.width * 0.76, size.height * 0.25, size.width * 0.96, size.height * 0.55, size.width * 0.82, size.height)
-      ..lineTo(size.width, size.height)
-      ..lineTo(size.width, 0)
-      ..close();
-    canvas.drawPath(river, water);
-
-    for (var i = 1; i <= 3; i++) {
-      final y = size.height * (i / 4);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y - 18), road,);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y - 18), roadEdge);
-    }
-    for (var i = 1; i <= 3; i++) {
-      final x = size.width * (i / 4);
-      canvas.drawLine(Offset(x, 0), Offset(x - 24, size.height), road);
-      canvas.drawLine(Offset(x, 0), Offset(x - 24, size.height), roadEdge);
-    }
-
-    final route = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.85)
-      ..strokeWidth = 5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final routePath = Path()
-      ..moveTo(size.width * 0.25, size.height * 1.05)
-      ..cubicTo(size.width * 0.38, size.height * 0.75, size.width * 0.37, size.height * 0.45, size.width * 0.57, size.height * -0.1);
-    canvas.drawPath(routePath, route);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

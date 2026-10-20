@@ -15,6 +15,14 @@ class BusArrivalInfo {
     this.nextBus,
   });
 
+  // Display adapter for preview ordering; live arrivals can replace the provider.
+  int get etaSeconds {
+    if (remain.contains('곧')) return 0;
+    final minutes = int.tryParse(RegExp(r'(\d+)분').firstMatch(remain)?.group(1) ?? '');
+    final seconds = int.tryParse(RegExp(r'(\d+)초').firstMatch(remain)?.group(1) ?? '') ?? 0;
+    return minutes == null ? 86400 : minutes * 60 + seconds;
+  }
+
   String get id => '${station}_$busNum';
 }
 
