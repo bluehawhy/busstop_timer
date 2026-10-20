@@ -19,11 +19,11 @@ if(process.argv[2]==='create-device') {
   console.log(JSON.stringify(created));
   await db.close();process.exit(0);
 }
-const base=(process.env.BASE_PATH??'/bustimer').replace(/\/$/,'');
+const base=(process.env.BASE_PATH??'/').replace(/\/$/,'');
 const staticRoot=resolve(process.env.WEB_ROOT??'../build/web');
 const equal=(a,b)=>Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript','.json':'application/json','.css':'text/css','.wasm':'application/wasm','.png':'image/png','.svg':'image/svg+xml','.woff2':'font/woff2'};
-const allowed=(process.env.ALLOWED_ORIGINS??'https://app.bluewaikiki.top').split(',').map(v=>v.trim());
+const allowed=(process.env.ALLOWED_ORIGINS??'https://bustimer.bluewaikiki.top').split(',').map(v=>v.trim());
 const server=createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');

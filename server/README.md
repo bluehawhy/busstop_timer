@@ -1,6 +1,6 @@
 # Ubuntu 버스 서버 + 전용 PostgreSQL
 
-운영 주소: **https://app.bluewaikiki.top/bustimer/**. 버스 프로젝트의 Node.js 24 API와 PostgreSQL 16을 함께 실행한다. 다른 프로젝트의 PostgreSQL 컨테이너·볼륨은 사용하지 않는다.
+운영 주소: **https://bustimer.bluewaikiki.top/**. 버스 프로젝트의 Node.js 24 API와 PostgreSQL 16을 함께 실행한다. 다른 프로젝트의 PostgreSQL 컨테이너·볼륨은 사용하지 않는다.
 
 - `bustimer`: API·Flutter Web 제공. 공통 Caddy에는 `bus-proxy`의 `bus-api:18082`로 연결한다.
 - `postgres`: 버스 전용 DB. 호스트 포트와 프록시 네트워크에 연결하지 않는다.
@@ -10,18 +10,22 @@
 
 ## 최초 배포
 
+이 문서의 기본 홈서버 경로에서는 저장소 루트에서 `bash server/deploy/deploy.sh`로 환경 설정 준비·루트 경로 웹 빌드·컨테이너 실행을 한 번에 진행할 수 있다. 스크립트는 프로젝트명 `busstop_timer`를 사용하고 기존 비밀번호·토큰을 유지하며 버스 도메인을 허용 Origin에 추가한다. Flutter SDK가 PATH 또는 `~/flutter`, `~/development/flutter`, `/opt/flutter`에 필요하다. 공통 Caddy 설정은 별도로 적용한다.
+
 신규 배포 프로젝트명은 `busstop_timer`다. 최초 실행 시 버스 전용 PostgreSQL 볼륨과 DB를 만들고 필요한 테이블을 자동 생성한다.
 
 저장소 루트에서 웹을 빌드한다. Flutter SDK가 없는 호스트에서는 다른 빌드 환경에서 동일 명령으로 생성한 `build/web`을 배치한다. 저장소의 `web/` 소스 디렉터리로 대체하면 안 된다.
 
 ```bash
 flutter pub get
-flutter build web --release --base-href /bustimer/ --dart-define=BUS_API_URL=https://app.bluewaikiki.top/bustimer
+flutter build web --release --base-href / --dart-define=BUS_API_URL=https://bustimer.bluewaikiki.top
 cd server
 cp -n .env.example .env
 ```
 
 `.env`의 `POSTGRES_ADMIN_PASSWORD`, `BUS_DB_PASSWORD`, `API_BEARER_TOKEN`을 각각 다른 임의 값으로 설정한다. 각 값은 `openssl rand -hex 32`로 생성할 수 있다. DB 비밀번호는 URL에 조합하므로 16진수 문자열을 사용한다. 실제 값은 커밋하지 않는다. `chmod 600 .env`로 권한을 제한한다.
+
+이전 예제로 `.env`를 이미 만들었다면 `ALLOWED_ORIGINS=https://bustimer.bluewaikiki.top`으로 변경한다. DB 비밀번호와 API 토큰은 유지한다. 기존 `/bustimer/`용 웹 빌드도 위의 루트 경로 명령으로 다시 빌드한다.
 
 공통 Docker Caddy 구성에서는 Compose 2.24.4 이상이 필요하다. 프록시 overlay를 항상 마지막에 지정한다.
 
@@ -41,23 +45,33 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 
 ```bash
 cd /home/mins/source/bluewaikiki_api_server
-docker compose -f compose.proxy.yaml exec -T caddy wget -qO- http://bus-api:18082/bustimer/health
+docker compose -f compose.proxy.yaml exec -T caddy wget -qO- http://bus-api:18082/health
 ```
 
-`proxy/local/caddy/Caddyfile`의 기존 버스 블록을 아래 upstream으로 바꾼다. 기존 `unix//run/host-relay/bus.sock` 또는 `127.0.0.1:18082`의 버스 upstream을 대체한다. 다른 서비스 블록은 유지한다.
+`proxy/local/caddy/Caddyfile`에 아래 독립 사이트 블록을 추가한다. DNS의 `bustimer.bluewaikiki.top`이 홈서버 공인 IP를 가리키고 기존 TCP 80/443 포워딩이 유지되어야 한다. 공통 Caddy가 HTTPS 인증서 발급과 HTTP→HTTPS 리다이렉트를 처리한다.
 
 ```caddyfile
-handle /bustimer/* {
+bustimer.bluewaikiki.top {
+    encode zstd gzip
     reverse_proxy bus-api:18082
 }
 ```
 
-`handle_path`로 `/bustimer` 접두사를 제거하지 않는다. 설정 검증 뒤 reload한다.
+웹 정적 파일과 `/api/*`, `/health`를 버스 서버가 같은 루트에서 제공한다. `/bustimer` 접두사 추가나 제거를 위한 rewrite는 사용하지 않는다. 설정 파일을 백업하고 검증 뒤 reload한다.
 
 ```bash
 docker compose -f compose.proxy.yaml exec -T caddy caddy validate --config /etc/caddy/Caddyfile
 docker compose -f compose.proxy.yaml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
-curl --fail --show-error https://app.bluewaikiki.top/bustimer/health
+curl --fail --show-error https://bustimer.bluewaikiki.top/health
+```
+
+기존 `app.bluewaikiki.top/bustimer/` 경로를 안내용으로 유지하려면 해당 app 사이트의 버스 블록만 아래 리다이렉트로 대체한다. 나머지 app·가계부·관리 도메인 설정은 그대로 둔다.
+
+```caddyfile
+redir /bustimer https://bustimer.bluewaikiki.top/ 302
+handle_path /bustimer/* {
+    redir https://bustimer.bluewaikiki.top{uri} 302
+}
 ```
 
 버스 연결이 확인되면 다음 유지보수 때 host-relay의 `HOST_RELAY_TARGETS`에서 `bus:18082`만 제외할 수 있다. 다른 relay 항목은 계속 사용한다. 프로젝트 업데이트 때도 위의 프로젝트명과 Compose 파일 목록을 유지한다.
@@ -77,7 +91,7 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml exec busti
 
 초기 DB에는 가짜 정류장·버스가 없다. 실제 공급자 수집기가 아래 계약으로 관리자 인증을 통해 upsert한다. 날짜/운행일과 노선 방향을 확인하고 날짜가 지난 운행을 새 운행으로 재사용하지 않는다.
 
-`POST /bustimer/api/catalog`, `Authorization: Bearer <관리자 토큰>`
+`POST /api/catalog`, `Authorization: Bearer <관리자 토큰>`
 
 ```json
 {
@@ -114,4 +128,4 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml exec -T po
 
 복구는 API를 중지하고 **별도의 빈 PostgreSQL DB**에 `pg_restore --exit-on-error --no-owner --no-acl`로 수행한 뒤 검증하고 전환한다. 앱 계정이 복구된 테이블을 소유하도록 `--role=bustimer`를 지정한다. 운영 DB를 대상으로 한 `--clean`, `docker compose down -v`, 볼륨 삭제는 일반 업데이트 절차에 포함하지 않는다.
 
-장애 시 `docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml logs --tail 100 bustimer postgres`로 확인한다. `/bustimer/health`는 실제 DB 쿼리도 확인하므로 DB 연결이 끊기면 성공으로 응답하지 않는다.
+장애 시 `docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml logs --tail 100 bustimer postgres`로 확인한다. `/health`는 실제 DB 쿼리도 확인하므로 DB 연결이 끊기면 성공으로 응답하지 않는다.
