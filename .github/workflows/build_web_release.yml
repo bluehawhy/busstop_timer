@@ -1,4 +1,4 @@
-name: build_web_release
+name: build_web_release_and_deploy
 on:
   workflow_dispatch:
   push:
@@ -10,6 +10,7 @@ on:
       - 'pubspec.*'
       - 'server/web/**'
       - '.github/workflows/build_web_release.yml'
+      - 'scripts/deploy-web.py'
 permissions:
   contents: read
   packages: write
@@ -18,6 +19,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.publish.outputs.digest }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +55,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v6
+        id: publish
         with:
           context: .
           file: server/web/Dockerfile
@@ -60,3 +65,23 @@ jobs:
             ${{ steps.image.outputs.name }}:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy web only
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, web-deploy]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy the built image
+        env:
+          WEB_DEPLOY_DIR: ${{ vars.WEB_DEPLOY_DIR }}
+          WEB_DEPLOY_ENV_FILE: ${{ vars.WEB_DEPLOY_ENV_FILE }}
+          WEB_DEPLOY_IMAGE: ${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/deploy-web.py

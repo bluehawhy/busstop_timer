@@ -2,7 +2,6 @@ services:
   web:
     labels:
       top.bluewaikiki.deploy.role: web
-      top.bluewaikiki.deploy.workflow: ${WEB_BUILD_WORKFLOW_URL:-https://github.com/bluehawhy/busstop_timer/actions/workflows/build_web_release.yml}
     image: ${WEB_IMAGE:-ghcr.io/bluehawhy/busstop_timer-web}:${WEB_IMAGE_TAG:-main}
     pull_policy: always
     restart: unless-stopped
@@ -10,8 +9,6 @@ services:
       - "127.0.0.1:${WEB_PORT:-18082}:18082"
     depends_on:
       bustimer:
-    labels:
-      top.bluewaikiki.deploy.role: api
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:18082/"]
@@ -22,6 +19,8 @@ services:
       driver: journald
 
   bustimer:
+    labels:
+      top.bluewaikiki.deploy.role: api
     build:
       context: ..
       dockerfile: server/Dockerfile
@@ -33,6 +32,11 @@ services:
       API_BEARER_TOKEN: ${API_BEARER_TOKEN:?Set API_BEARER_TOKEN in server/.env}
       BUS_ARRIVALS_URL: ${BUS_ARRIVALS_URL:-}
       BUS_API_KEY: ${BUS_API_KEY:-}
+      BUS_PROVIDER: ${BUS_PROVIDER:-normalized}
+      TAGO_SERVICE_KEY: ${TAGO_SERVICE_KEY:-}
+      BUSAN_SERVICE_KEY: ${BUSAN_SERVICE_KEY:-}
+      BUS_PROVIDER_DAILY_LIMIT: ${BUS_PROVIDER_DAILY_LIMIT:-9000}
+      BUS_COLLECTION_BATCH_SIZE: ${BUS_COLLECTION_BATCH_SIZE:-5}
       MAX_LOCATION_ACCURACY_METERS: ${MAX_LOCATION_ACCURACY_METERS:-100}
       DEFAULT_RADIUS_METERS: ${DEFAULT_RADIUS_METERS:-30}
     depends_on:
