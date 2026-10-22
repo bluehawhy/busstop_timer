@@ -1,7 +1,5 @@
 # Ubuntu 버스 서버 + 전용 PostgreSQL
 
-> 웹 배포는 [Actions·GHCR 전환 안내](../WEB_DEPLOYMENT.md)를 우선합니다. 아래의 호스트 Flutter 빌드와 build/web 배치는 이전 방식이며 새 Compose에서는 사용하지 않습니다. web 서비스가 웹을 제공하고 bustimer는 API를 제공합니다.
-
 운영 주소: **https://bustimer.bluewaikiki.top/**. 버스 프로젝트의 Node.js 24 API와 PostgreSQL 16을 함께 실행한다. 다른 프로젝트의 PostgreSQL 컨테이너·볼륨은 사용하지 않는다.
 
 - `bustimer`: API·Flutter Web 제공. 공통 Caddy에는 `bus-proxy`의 `bus-api:18082`로 연결한다.
