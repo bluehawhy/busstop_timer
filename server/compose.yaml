@@ -1,5 +1,8 @@
 services:
   web:
+    labels:
+      top.bluewaikiki.deploy.role: web
+      top.bluewaikiki.deploy.workflow: ${WEB_BUILD_WORKFLOW_URL:-https://github.com/bluehawhy/busstop_timer/actions/workflows/build_web_release.yml}
     image: ${WEB_IMAGE:-ghcr.io/bluehawhy/busstop_timer-web}:${WEB_IMAGE_TAG:-main}
     pull_policy: always
     restart: unless-stopped
@@ -7,6 +10,8 @@ services:
       - "127.0.0.1:${WEB_PORT:-18082}:18082"
     depends_on:
       bustimer:
+    labels:
+      top.bluewaikiki.deploy.role: api
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:18082/"]
