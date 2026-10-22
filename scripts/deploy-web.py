@@ -32,7 +32,10 @@ def main():
     image = os.environ.get('WEB_DEPLOY_IMAGE', '')
     if not re.fullmatch(r'ghcr\.io/[a-z0-9_./-]+@sha256:[0-9a-f]{64}', image):
         raise RuntimeError('빌드 job이 반환한 GHCR 이미지 digest가 필요합니다.')
-    lock_path = Path(tempfile.gettempdir()) / ('bluewaikiki-deploy-' + hashlib.sha256(str(root).encode()).hexdigest() + '.lock')
+    repository = Path(output(['git', '-C', str(root), 'rev-parse', '--show-toplevel']).strip()).resolve()
+    lock_dir = repository.parent / '.bluewaikiki-deploy-locks'
+    lock_dir.mkdir(mode=0o700, exist_ok=True)
+    lock_path = lock_dir / (hashlib.sha256(str(root).encode()).hexdigest() + '.lock')
     with lock_path.open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
