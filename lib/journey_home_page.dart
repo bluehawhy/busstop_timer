@@ -309,11 +309,13 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   ]);
 
   Widget _activeView() {
-    if (_session == null) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    if (_session == null) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _heading('이동·알림', '승차부터 환승까지 함께할게요.'),
       _notice(Icons.directions_bus_outlined, '아직 시작한 이동이 없어요', '홈에서 경로를 비교하고 이동을 시작하면 구간별 승차 정보를 확인할 수 있어요.'),
       FilledButton(onPressed: () => setState(() => _tab = 0), child: const Text('이동 경로 찾기')),
     ]);
+    }
     final session = _session!, option = session['option'] as Map<String,dynamic>;
     return _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch,children: [
       _notice(Icons.notifications_active_rounded, '이동 중에도 놓치지 않도록', '각 구간의 버스 도착 5분 전에 안내해요. 알림 권한은 설정에서 켤 수 있어요.'),

@@ -51,3 +51,7 @@ server/.env
 
 # Node API dependencies
 node_modules/
+
+# CI-selected web image digest (server-local deployment state)
+.web-image.compose.json
+server/.web-image.compose.json

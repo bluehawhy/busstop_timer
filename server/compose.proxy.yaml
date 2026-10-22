@@ -1,6 +1,6 @@
 # Add AFTER the existing production Compose files. Compose >= 2.24.4.
 services:
-  bustimer:
+  web:
     ports: !reset []
     networks:
       default: {}

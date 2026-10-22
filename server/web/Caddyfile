@@ -1,0 +1,23 @@
+{
+    admin off
+    auto_https off
+}
+:18082 {
+    encode gzip
+    @api path /api/* /health
+    handle @api {
+        reverse_proxy bustimer:18082
+    }
+    handle {
+        root * /srv
+        @document path / /index.html /flutter_bootstrap.js /flutter_service_worker.js
+        header @document Cache-Control "no-store"
+        @missingAsset {
+            path_regexp asset "[.][^/]+$"
+            not file {path}
+        }
+        respond @missingAsset 404
+        try_files {path} {path}/ /index.html
+        file_server
+    }
+}

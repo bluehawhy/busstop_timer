@@ -1,11 +1,30 @@
 services:
+  web:
+    labels:
+      top.bluewaikiki.deploy.role: web
+    image: ${WEB_IMAGE:-ghcr.io/bluehawhy/busstop_timer-web}:${WEB_IMAGE_TAG:-main}
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-18082}:18082"
+    depends_on:
+      bustimer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:18082/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: journald
+
   bustimer:
+    labels:
+      top.bluewaikiki.deploy.role: api
     build:
       context: ..
       dockerfile: server/Dockerfile
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:18082:18082"
     environment:
       DATABASE_URL: postgresql://bustimer:${BUS_DB_PASSWORD:?Set BUS_DB_PASSWORD in server/.env}@postgres:5432/bustimer
       BASE_PATH: /
@@ -23,13 +42,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - type: bind
-        source: ../build/web
-        target: /app/web
-        read_only: true
-        bind:
-          create_host_path: false
     networks:
       - default
       - database
