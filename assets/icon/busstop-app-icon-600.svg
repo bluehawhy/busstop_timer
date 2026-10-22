@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <rect width="600" height="600" rx="120" fill="#f3f8fb"/>
+  <ellipse cx="300" cy="508" rx="190" ry="22" fill="#d7e8ee"/>
+  <!-- simple front-facing city bus -->
+  <rect x="135" y="83" width="330" height="420" rx="68" fill="#0876df"/>
+  <path d="M164 128q0-31 32-31h208q32 0 32 31v19H164z" fill="#35a8f4"/>
+  <rect x="193" y="125" width="214" height="70" rx="20" fill="#103b54"/>
+  <!-- timer destination display -->
+  <circle cx="300" cy="160" r="25" fill="#ffd166"/>
+  <path d="M300 145v16l12 8" fill="none" stroke="#123b54" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="300" cy="160" r="3.5" fill="#123b54"/>
+  <!-- broad front windshield -->
+  <rect x="165" y="218" width="270" height="151" rx="32" fill="#103b54"/>
+  <path d="M300 225v136" stroke="#2c6785" stroke-width="8"/>
+  <path d="M184 239q0-11 13-11h83v121h-96zM320 228h83q13 0 13 11v110h-96z" fill="#286b89" opacity=".65"/>
+  <path d="M192 244h82" stroke="#90d7ef" stroke-width="6" stroke-linecap="round" opacity=".55"/>
+  <path d="M326 244h81" stroke="#90d7ef" stroke-width="6" stroke-linecap="round" opacity=".55"/>
+  <!-- front fascia -->
+  <path d="M163 385h274v74q0 22-22 22H185q-22 0-22-22z" fill="#f1f9fd"/>
+  <rect x="218" y="408" width="164" height="39" rx="19" fill="#d6e8ee"/>
+  <path d="M246 428h108" stroke="#94b5c4" stroke-width="7" stroke-linecap="round"/>
+  <rect x="153" y="393" width="38" height="29" rx="12" fill="#ffd166"/>
+  <rect x="409" y="393" width="38" height="29" rx="12" fill="#ffd166"/>
+  <path d="M173 465v12m254-12v12" stroke="#0756bd" stroke-width="8" stroke-linecap="round"/>
+  <!-- wheels -->
+  <rect x="111" y="363" width="34" height="105" rx="17" fill="#123348"/>
+  <rect x="455" y="363" width="34" height="105" rx="17" fill="#123348"/>
+  <path d="M118 386h20m-20 55h20m324-55h20m-20 55h20" stroke="#7f9ba8" stroke-width="5" stroke-linecap="round"/>
+</svg>
