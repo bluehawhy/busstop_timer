@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_styles.dart';
 import 'bus_data_service.dart';
 import 'journey_home_page.dart';
+import 'live_bus_page.dart';
 import 'widgets/stop_map_preview.dart';
 
 class BusHomePage extends ConsumerStatefulWidget {
@@ -676,7 +677,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
 
   Widget _demoDataNote() {
     return const Text(
-      '현재 도착 시간과 지도 표시는 화면 확인을 위한 샘플입니다.',
+      '정류장 찾기에서 연결 후 내 버스를 저장하고 도착정보를 새로고침하세요. 지도는 미리보기입니다.',
       style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
       textAlign: TextAlign.center,
     );
@@ -789,7 +790,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
 
   void _openStopSearch() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const AddBusPage()),
+      MaterialPageRoute<void>(builder: (_) => const LiveBusPage()),
     );
   }
 
