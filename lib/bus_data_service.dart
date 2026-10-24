@@ -3,12 +3,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class BusArrivalInfo {
+  final String? recordId;
   final String station;
   final String busNum;
   final String remain;
   final String? nextBus;
 
   const BusArrivalInfo({
+    this.recordId,
     required this.station,
     required this.busNum,
     required this.remain,
@@ -23,27 +25,12 @@ class BusArrivalInfo {
     return minutes == null ? 86400 : minutes * 60 + seconds;
   }
 
-  String get id => '${station}_$busNum';
+  String get id => recordId ?? '${station}_$busNum';
 }
 
 class BusDataService {
-  // 나중에 여기서 공공데이터 API를 호출하게 됩니다.
-  static List<BusArrivalInfo> getRegisteredBuses() {
-    return const [
-      BusArrivalInfo(
-        station: "부산역 (중앙대로)",
-        busNum: "179",
-        remain: "5분 30초",
-        nextBus: "12분",
-      ),
-      BusArrivalInfo(
-        station: "서면역",
-        busNum: "1000",
-        remain: "3분",
-        nextBus: null,
-      ),
-    ];
-  }
+  static List<BusArrivalInfo> getRegisteredBuses() => [];
+
 }
 
 class BusListNotifier extends Notifier<List<BusArrivalInfo>> {
@@ -51,6 +38,8 @@ class BusListNotifier extends Notifier<List<BusArrivalInfo>> {
   List<BusArrivalInfo> build() {
     return BusDataService.getRegisteredBuses();
   }
+
+  void replaceBuses(List<BusArrivalInfo> buses) { state = buses; }
 
   void addBus(BusArrivalInfo bus) {
     final alreadyExists = state.any((item) => item.id == bus.id);

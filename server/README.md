@@ -239,3 +239,25 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 부산 노선/정류소에는 `busan-` 접두사를 붙여 TAGO·수동 카탈로그 ID와 충돌을 줄인다. 노선 목록은 부산 응답에 포함된 노선과 DB 카탈로그를 합친 결과이며 공급자 누락까지 보완하는 전체 노선 DB 동기화는 아니다. 첫/다음 차량이 모두 없으면 실시간 숫자 도착값을 만들지 않고 이력 추정 또는 자료 부족으로 반환한다. 좌표는 정류소 좌표이며 사용자의 위치 추적 구조는 변경하지 않는다.
 
 공급자 검색과 도착정보 수집은 같은 일일 호출 상한을 공유한다. 성공 외 결과코드, XML 오류와 통신 장애는 구분된 오류로 처리한다. 운영 키 검증은 실제 공급자 통신이 가능한 서버에서 확인해야 한다.
+
+## 도시별 실시간 연동
+
+`BUS_PROVIDER=auto`와 사용할 `BUSAN_SERVICE_KEY`, `TAGO_SERVICE_KEY`를 서버에 설정한다. 기존 busan/tago/normalized 설정도 유지된다. 새로 검색한 정류소는 provider·도시코드를 저장하므로 여러 도시를 동시에 구독해도 정류소별 API로 수집한다. 기존 부산 ID는 자동 이관되고 기존 TAGO 수동 매핑·구독 ID는 유지한다. `auto`에서 기존 수동 매핑 중 도시코드가 있는 정류소는 TAGO로 처리한다.
+
+| 구분 | 검색 요청 | 도착 요청 | 시간 단위 |
+| --- | --- | --- | --- |
+| 부산 BIMS | busStopList: bstopnm 또는 arsno | stopArrByBstopid: bstopid | 분 → 초 |
+| TAGO 제공 도시 | BusSttnInfoInqireService/getSttnNoList: cityCode + nodeNm 또는 nodeNo | ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList: cityCode + nodeId | 초 |
+
+- `GET /api/bus/cities`: 키가 설정된 부산과 TAGO 정류소/도착정보 양쪽 도시코드 목록의 교집합을 반환한다. TAGO 목록은 성공 시 1시간 메모리 캐시하며 공급자 호출마다 일일 한도를 차감한다. 키 문자열을 응답이나 로그에 노출하지 않는다.
+- `GET /api/bus/stops/search?provider=busan&q=부산역`
+- `GET /api/bus/stops/search?provider=tago&cityCode=25&q=시청&page=1`
+- 번호 검색은 `q` 대신 `arsNo`를 사용한다. 부산은 앞자리 0을 보존한 5자리, TAGO는 1~10자리다. 페이지당 100개다.
+- TAGO 신규 정류소/노선 ID는 `tago-<cityCode>-<공급자ID>`로 구분한다. 다른 도시의 동일 노선 번호나 공급자ID를 합치지 않는다.
+- 부산 외 모든 도시를 지원한다고 가정하지 않는다. 서울·경기 등 별도 API가 필요한 지역이 TAGO 목록에 없으면 선택지에 나오지 않는다. 해당 지역의 전용 API 어댑터는 이번 변경의 지원 범위에 포함되지 않는다.
+
+앱의 **정류장 찾기**에서 개인 기기 토큰으로 연결한 뒤 도시 선택 → 정류소 검색 → 정류소 선택 → 노선 저장 → 도착정보 새로고침을 이용한다. 기본 샘플 버스는 제거했다. 저장 데이터는 서버 구독에 유지되며 화면 재진입 시 다시 연결한다. 토큰을 코드나 빌드 설정에 넣지 않는다. 도착정보는 수동 새로고침하며 푸시 알림·지도 실좌표 연결은 별개다.
+
+TAGO는 [정류소정보](https://www.data.go.kr/data/15098534/openapi.do)와 [도착정보](https://www.data.go.kr/data/15098530/openapi.do) 두 서비스의 활용 승인이 필요하다. 부산은 [BIMS](https://www.data.go.kr/data/15092750/openapi.do) 승인이 필요하다. 인코딩/디코딩 키를 모두 허용한다.
+
+`cd server && npm test`로 도시별 URL/파라미터, 도시 지원 교집합, 단위 변환, 앞차/뒷차, 키 인코딩, 빈 응답·부분 응답·잘못된 정류소·오류 응답 및 검색 저장 계약을 모의 HTTP로 검증한다. 실제 키의 승인 상태·운영 통신과 PostgreSQL 마이그레이션은 운영 환경에서 별도 확인한다.

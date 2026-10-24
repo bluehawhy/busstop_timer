@@ -1,20 +1,29 @@
 import { ApiError } from './planner.js';
+import { decodedKey } from './tago-catalog.js';
 import { fetchBusanArrivals } from './busan-provider.js';
 
 const number = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 export function providerName(env) {
   return ['busan','tago'].includes(env.BUS_PROVIDER) ? env.BUS_PROVIDER : 'normalized';
 }
+export function stopEnvironment(stop, env = process.env) {
+  const mapped = stop.provider ?? (stop.id?.startsWith('busan-') ? 'busan' : stop.id?.startsWith('tago-') ? 'tago' : null);
+  if (mapped && !['busan','tago','normalized'].includes(mapped)) throw new ApiError('INVALID_BUS_PROVIDER');
+  return mapped ? {...env,BUS_PROVIDER:mapped} : env.BUS_PROVIDER==='auto' ? {...env,BUS_PROVIDER:stop.provider_city_code?'tago':'normalized'} : env;
+}
 export function providerKey(stop, env = process.env) {
+  env = stopEnvironment(stop,env);
   return `${providerName(env)}:${stop.provider_city_code ?? ''}:${stop.provider_stop_id || stop.id}`;
 }
 export function providerConfigured(env) {
+  if (env.BUS_PROVIDER === 'auto') return Boolean(env.BUSAN_SERVICE_KEY?.trim() || env.TAGO_SERVICE_KEY?.trim());
   if (env.BUS_PROVIDER === 'busan') return Boolean(env.BUSAN_SERVICE_KEY?.trim());
   return env.BUS_PROVIDER === 'tago' ? Boolean(env.TAGO_SERVICE_KEY) : Boolean(env.BUS_ARRIVALS_URL);
 }
 
 // All URLs come from server configuration, never client input.
 export async function fetchBusArrivals(stop, env = process.env) {
+  env = stopEnvironment(stop,env);
   if (!providerConfigured(env)) throw new ApiError('BUS_PROVIDER_NOT_CONFIGURED', 503);
   if (providerName(env) === 'busan') return fetchBusanArrivals(stop,env);
   const tago = providerName(env) === 'tago';
@@ -27,7 +36,7 @@ export async function fetchBusArrivals(stop, env = process.env) {
   const headers = {};
   if (tago) {
     // Use the decoded service key: URLSearchParams performs URL encoding once.
-    url.searchParams.set('serviceKey', env.TAGO_SERVICE_KEY);
+    url.searchParams.set('serviceKey', decodedKey(env.TAGO_SERVICE_KEY));
     url.searchParams.set('cityCode', stop.provider_city_code);
     url.searchParams.set('nodeId', stop.provider_stop_id);
     url.searchParams.set('_type', 'json');
@@ -49,7 +58,7 @@ export async function fetchBusArrivals(stop, env = process.env) {
     const body = payload.response.body;
     if (!body || !number(body.totalCount) || Number(body.totalCount) > 1000) throw new ApiError('BUS_PROVIDER_INVALID_RESPONSE', 502);
     const items = body.items?.item;
-    rows = Number(body.totalCount) === 0 ? [] : Array.isArray(items) ? items : items ? [items] : null;
+    rows = Array.isArray(items) ? items : items ? [items] : Number(body.totalCount)===0 ? [] : null;
     if (rows && rows.length !== Number(body.totalCount)) throw new ApiError('BUS_PROVIDER_INCOMPLETE_RESPONSE', 502);
   } else {
     rows = Array.isArray(payload) ? payload : payload?.arrivals;
@@ -57,7 +66,8 @@ export async function fetchBusArrivals(stop, env = process.env) {
   if (!Array.isArray(rows) || rows.length > 1000) throw new ApiError('BUS_PROVIDER_INVALID_RESPONSE', 502);
   const fetchedAt = new Date().toISOString();
   const arrivals = rows.map(row => {
-    const routeId = tago ? row.routeid : row.routeId;
+    const routeId = tago ? (stop.id.startsWith('tago-') ? `tago-${stop.provider_city_code}-${row.routeid}` : row.routeid) : row.routeId;
+    if(tago && (!row.routeid || String(row.nodeid)!==String(stop.provider_stop_id))) throw new ApiError('BUS_PROVIDER_INVALID_RESPONSE',502);
     const seconds = tago ? row.arrtime : number(row.etaMinutes) ? Number(row.etaMinutes) * 60 : null;
     const sourceAt = !tago && row.updatedAt != null ? Date.parse(row.updatedAt) : Date.parse(fetchedAt);
     if (!routeId || String(routeId).length > 199 || !number(seconds) || seconds < 0 || seconds > 14400 ||

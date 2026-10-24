@@ -1,8 +1,9 @@
 import { ApiError } from './planner.js';
 import { reserveProviderRequest } from './bus-quota.js';
-import { fetchBusArrivals, providerConfigured, providerKey } from './bus-provider.js';
+import { fetchBusArrivals, providerConfigured, providerKey, stopEnvironment } from './bus-provider.js';
 
 export async function refreshStop(db, stop, env = process.env) {
+  env = stopEnvironment(stop,env);
   if (!providerConfigured(env)) return 'not_configured';
   await db.prepare('INSERT INTO bus_arrival_cache(stop_id) VALUES($1) ON CONFLICT DO NOTHING').run(stop.id);
   // A database lease deduplicates HTTP requests and workers, including failures.
