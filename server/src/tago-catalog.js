@@ -6,11 +6,16 @@ export function decodedKey(value) {
   catch { throw new ApiError('BUS_PROVIDER_INVALID_KEY_ENCODING',503); }
 }
 
+export function tagoKey(env, service) {
+  const specific = service === 'BusSttnInfoInqireService' ? env.TAGO_STATION_SERVICE_KEY : env.TAGO_ARRIVAL_SERVICE_KEY;
+  return specific?.trim() || env.TAGO_SERVICE_KEY?.trim() || '';
+}
+
 export async function requestTago(service, operation, params, env = process.env) {
   const allowed = {ArvlInfoInqireService:['getCtyCodeList'],BusSttnInfoInqireService:['getCtyCodeList','getSttnNoList']};
   if (!allowed[service]?.includes(operation)) throw new ApiError('INVALID_TAGO_OPERATION');
   const url = new URL(`https://apis.data.go.kr/1613000/${service}/${operation}`);
-  url.searchParams.set('serviceKey',decodedKey(env.TAGO_SERVICE_KEY));
+  url.searchParams.set('serviceKey',decodedKey(tagoKey(env,service)));
   url.searchParams.set('_type','json');
   for (const [key,value] of Object.entries(params)) url.searchParams.set(key,String(value));
   let payload;

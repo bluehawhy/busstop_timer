@@ -1,5 +1,5 @@
 import { ApiError } from './planner.js';
-import { decodedKey } from './tago-catalog.js';
+import { decodedKey, tagoKey } from './tago-catalog.js';
 import { fetchBusanArrivals } from './busan-provider.js';
 
 const number = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -16,9 +16,9 @@ export function providerKey(stop, env = process.env) {
   return `${providerName(env)}:${stop.provider_city_code ?? ''}:${stop.provider_stop_id || stop.id}`;
 }
 export function providerConfigured(env) {
-  if (env.BUS_PROVIDER === 'auto') return Boolean(env.BUSAN_SERVICE_KEY?.trim() || env.TAGO_SERVICE_KEY?.trim());
+  if (env.BUS_PROVIDER === 'auto') return Boolean(env.BUSAN_SERVICE_KEY?.trim() || tagoKey(env,'ArvlInfoInqireService'));
   if (env.BUS_PROVIDER === 'busan') return Boolean(env.BUSAN_SERVICE_KEY?.trim());
-  return env.BUS_PROVIDER === 'tago' ? Boolean(env.TAGO_SERVICE_KEY) : Boolean(env.BUS_ARRIVALS_URL);
+  return env.BUS_PROVIDER === 'tago' ? Boolean(tagoKey(env,'ArvlInfoInqireService')) : Boolean(env.BUS_ARRIVALS_URL);
 }
 
 // All URLs come from server configuration, never client input.
@@ -36,7 +36,7 @@ export async function fetchBusArrivals(stop, env = process.env) {
   const headers = {};
   if (tago) {
     // Use the decoded service key: URLSearchParams performs URL encoding once.
-    url.searchParams.set('serviceKey', decodedKey(env.TAGO_SERVICE_KEY));
+    url.searchParams.set('serviceKey', decodedKey(tagoKey(env,'ArvlInfoInqireService')));
     url.searchParams.set('cityCode', stop.provider_city_code);
     url.searchParams.set('nodeId', stop.provider_stop_id);
     url.searchParams.set('_type', 'json');

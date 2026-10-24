@@ -93,3 +93,22 @@ test('search rejects unsupported city and persists selected provider',async t=>{
   assert.equal((await (await call('provider=tago&cityCode=25&q=시청')).json()).provider,'tago');
   assert.equal(saved[6],'25');assert.equal(saved[7],'tago');
 });
+
+test('different station and arrival keys reach their own city-list APIs',async t=>{
+  const split={...env,TAGO_STATION_SERVICE_KEY:'station%2Bkey',TAGO_ARRIVAL_SERVICE_KEY:'arrival%2Bkey'};
+  mock(t,async url=>{
+    assert.equal(url.searchParams.get('serviceKey'),url.pathname.includes('Arvl')?'arrival+key':'station+key');
+    return json([{citycode:25,cityname:'대전'}]);
+  });
+  assert.equal((await tagoCities(split)).length,1);
+});
+test('station search and arrival feed each prefer their specific key',async t=>{
+  const split={...env,TAGO_STATION_SERVICE_KEY:'station',TAGO_ARRIVAL_SERVICE_KEY:'arrival'};
+  mock(t,async url=>{
+    const arrival=url.pathname.includes('Arvl');
+    assert.equal(url.searchParams.get('serviceKey'),arrival?'arrival':'station');
+    return arrival?json([{nodeid:'DJB1',routeid:'R1',arrtime:75}]):json([{nodeid:'DJB1',nodenm:'시청',gpslati:36.3,gpslong:127.4}]);
+  });
+  await searchTagoStops({cityCode:'25',query:'시청'},split);
+  await fetchBusArrivals(tago,split);
+});
