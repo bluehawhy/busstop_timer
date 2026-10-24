@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { providerKey, providerName, providerConfigured, stopEnvironment } from './bus-provider.js';
-import { tagoCities, searchTagoStops } from './tago-catalog.js';
+import { tagoCities, searchTagoStops, tagoKey } from './tago-catalog.js';
 import { searchBusanStops } from './busan-provider.js';
 import { reserveProviderRequest } from './bus-quota.js';
 import { ApiError } from './planner.js';
@@ -9,10 +9,12 @@ let cityCache;
 async function availableCities(db) {
   const env=process.env;
   const cities=env.BUSAN_SERVICE_KEY?.trim() ? [{provider:'busan',cityCode:null,name:'부산광역시'}] : [];
-  if(env.TAGO_SERVICE_KEY?.trim()) {
-    if(!cityCache || cityCache.key!==env.TAGO_SERVICE_KEY || cityCache.expires<Date.now()) {
+  const keys=[tagoKey(env,'ArvlInfoInqireService'),tagoKey(env,'BusSttnInfoInqireService')];
+  const cacheKey=JSON.stringify(keys);
+  if(keys.every(Boolean)) {
+    if(!cityCache || cityCache.key!==cacheKey || cityCache.expires<Date.now()) {
       const rows=await tagoCities(env,()=>reserveProviderRequest(db));
-      cityCache={key:env.TAGO_SERVICE_KEY,rows,expires:Date.now()+3600000};
+      cityCache={key:cacheKey,rows,expires:Date.now()+3600000};
     }
     cities.push(...cityCache.rows);
   }

@@ -142,7 +142,8 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml exec -T po
 
 ```dotenv
 BUS_PROVIDER=tago
-TAGO_SERVICE_KEY=공공데이터포털_디코딩_인증키
+TAGO_STATION_SERVICE_KEY=정류소정보_인증키
+TAGO_ARRIVAL_SERVICE_KEY=도착정보_인증키
 BUS_PROVIDER_DAILY_LIMIT=9000
 BUS_COLLECTION_BATCH_SIZE=5
 ```
@@ -242,7 +243,7 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 
 ## 도시별 실시간 연동
 
-`BUS_PROVIDER=auto`와 사용할 `BUSAN_SERVICE_KEY`, `TAGO_SERVICE_KEY`를 서버에 설정한다. 기존 busan/tago/normalized 설정도 유지된다. 새로 검색한 정류소는 provider·도시코드를 저장하므로 여러 도시를 동시에 구독해도 정류소별 API로 수집한다. 기존 부산 ID는 자동 이관되고 기존 TAGO 수동 매핑·구독 ID는 유지한다. `auto`에서 기존 수동 매핑 중 도시코드가 있는 정류소는 TAGO로 처리한다.
+`BUS_PROVIDER=auto`와 사용할 `BUSAN_SERVICE_KEY`, `TAGO_STATION_SERVICE_KEY`, `TAGO_ARRIVAL_SERVICE_KEY`를 서버에 설정한다. 기존 busan/tago/normalized 설정도 유지된다. 새로 검색한 정류소는 provider·도시코드를 저장하므로 여러 도시를 동시에 구독해도 정류소별 API로 수집한다. 기존 부산 ID는 자동 이관되고 기존 TAGO 수동 매핑·구독 ID는 유지한다. `auto`에서 기존 수동 매핑 중 도시코드가 있는 정류소는 TAGO로 처리한다.
 
 | 구분 | 검색 요청 | 도착 요청 | 시간 단위 |
 | --- | --- | --- | --- |
@@ -261,3 +262,7 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 TAGO는 [정류소정보](https://www.data.go.kr/data/15098534/openapi.do)와 [도착정보](https://www.data.go.kr/data/15098530/openapi.do) 두 서비스의 활용 승인이 필요하다. 부산은 [BIMS](https://www.data.go.kr/data/15092750/openapi.do) 승인이 필요하다. 인코딩/디코딩 키를 모두 허용한다.
 
 `cd server && npm test`로 도시별 URL/파라미터, 도시 지원 교집합, 단위 변환, 앞차/뒷차, 키 인코딩, 빈 응답·부분 응답·잘못된 정류소·오류 응답 및 검색 저장 계약을 모의 HTTP로 검증한다. 실제 키의 승인 상태·운영 통신과 PostgreSQL 마이그레이션은 운영 환경에서 별도 확인한다.
+
+### TAGO 서비스별 인증키가 다른 경우
+
+bustimer 서비스에 `TAGO_STATION_SERVICE_KEY`(버스정류소정보), `TAGO_ARRIVAL_SERVICE_KEY`(버스도착정보)를 각각 설정한다. 정류소 검색 및 정류소 지원 도시 목록에는 전자를, 도착정보 및 도착 지원 도시 목록에는 후자를 사용한다. 전용 키를 비워둔 서비스만 기존 `TAGO_SERVICE_KEY`를 공통 키로 사용한다. 두 서비스 중 하나라도 키가 없으면 TAGO 도시는 목록에 표시하지 않는다. 키 변경 시 도시 목록 캐시를 새로 조회한다. PostgreSQL에는 API 키를 넣지 않는다. 환경변수 저장 후 Compose 업데이트로 컨테이너를 재생성한다.
