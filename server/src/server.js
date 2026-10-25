@@ -6,6 +6,7 @@ import { openDatabase, legacyDatabase } from './database.js';
 import { journeyApi, evaluateSession } from './journeys.js';
 import legacy from './index.js';
 import { busApi } from './bus-api.js';
+import { collectStopCatalog } from './stop-catalog.js';
 import { collectSavedArrivals } from './bus-history.js';
 import { emailAuth, emailLinkLanding } from './email-auth.js';
 import { ApiError } from './planner.js';
@@ -129,10 +130,20 @@ async function collect() {
 }
 let pendingCollection=collect();
 const busTimer=setInterval(()=>{if(!collecting) pendingCollection=collect();},60000);
+let syncingCatalog=false;
+async function syncCatalog() {
+  if(syncingCatalog) return;
+  syncingCatalog=true;
+  try { await collectStopCatalog(db); }
+  catch(error) { console.error('Bus catalog collection failed:',error instanceof ApiError?error.message:'INTERNAL_ERROR'); }
+  finally { syncingCatalog=false; }
+}
+let pendingCatalog=syncCatalog();
+const catalogTimer=setInterval(()=>{if(!syncingCatalog) pendingCatalog=syncCatalog();},60000);
 let stopping=false;
 function shutdown(){
   if(stopping) return;
-  stopping=true;clearInterval(timer);clearInterval(busTimer);
-  server.close(async()=>{await pendingCollection;await db.close();});
+  stopping=true;clearInterval(timer);clearInterval(busTimer);clearInterval(catalogTimer);
+  server.close(async()=>{await Promise.all([pendingCollection,pendingCatalog]);await db.close();});
 }
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
