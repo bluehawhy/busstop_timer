@@ -1,3 +1,4 @@
+import 'email_auth_page.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -26,10 +27,7 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   final Set<String> _shown = {};
 
   @override
-  void initState() {
-    super.initState();
-    _connect();
-  }
+  void initState() { super.initState(); _connect(); }
 
   @override
   void dispose() {
@@ -50,6 +48,7 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
       throw Exception('서버 주소를 확인해주세요.');
     }
     _api?.dispose(); _api = await JourneyService.connect(baseUrl: _base.text.trim());
+    if (!mounted) { _api?.dispose(); return; }
     final stops = await _api!.request('journey-stops');
     final saved = await _api!.request('saved-journeys');
     final sessions = await _api!.request('journey-sessions');
@@ -225,9 +224,15 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
 
   Widget _settings() => _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     _heading('설정', '연결과 알림을 관리해요.'),
-    _notice(Icons.dns_outlined, _stops.isNotEmpty ? '서버 연결됨' : '서버에 연결해주세요', '저장 경로와 이동 정보를 자동으로 불러와요.'),
-    const SizedBox(height: 12), TextField(controller: _base, decoration: const InputDecoration(labelText: '앱 서버 주소')),
-    const SizedBox(height: 12), FilledButton(onPressed: _busy ? null : _connect, child: const Text('다시 연결')),
+    const Text('서버는 자동으로 연결됩니다. 이메일 인증으로 다른 기기에서도 저장한 경로를 불러올 수 있어요.'),
+    const SizedBox(height: 12), FilledButton(onPressed: _busy ? null : () async {
+      _timer?.cancel();
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EmailAuthPage()));
+      if (!mounted) return;
+      setState(() { _comparisons = []; _saved = []; _session = null; _shown.clear(); });
+      await _connect();
+    }, child: const Text('이메일 인증 · 계정 관리')),
+    const SizedBox(height: 12), OutlinedButton(onPressed: _busy ? null : _connect, child: const Text('다시 연결')),
     const Divider(), FilledButton.tonal(onPressed: _busy ? null : _enableNotifications, child: Text(_notify ? '알림 권한 확인 완료' : '승차·환승 알림 켜기')),
     const SizedBox(height: 12), const Text('현재 알림은 앱 또는 웹 화면이 실행 중일 때 확인합니다. 앱 종료 상태의 푸시 알림은 별도 연동이 필요합니다. 위치 권한은 필요하지 않습니다.'),
   ]));

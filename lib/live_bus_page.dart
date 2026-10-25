@@ -1,3 +1,4 @@
+import 'email_auth_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'bus_data_service.dart';
@@ -20,15 +21,11 @@ class _LiveBusPageState extends ConsumerState<LiveBusPage> {
   int _page = 1, _total = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _connect();
-  }
+  void initState() { super.initState(); _connect(); }
 
   Future<void> _connect() => _run(() async {
-    _api?.dispose();
-    _api = await JourneyService.connect();
-    if (!mounted) return;
+    _api?.dispose(); _api = await JourneyService.connect();
+    if (!mounted) { _api?.dispose(); return; }
     setState(() { _cities = []; _city = null; _stops = []; _routes = []; _saved = []; _arrivals = []; _stop = null; });
     final result = await _api!.request('bus/cities');
     if (!mounted) return;
@@ -91,8 +88,12 @@ class _LiveBusPageState extends ConsumerState<LiveBusPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('실시간 버스 조회')),
       body: ListView(padding: const EdgeInsets.all(20), children: [
-        if (_error != null)
-          TextButton(onPressed: _busy ? null : _connect, child: const Text('다시 시도')),
+        TextButton.icon(icon: const Icon(Icons.email_outlined), label: const Text('이메일 인증 · 계정 관리'),
+          onPressed: _busy ? null : () async {
+            await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EmailAuthPage()));
+            if (mounted) await _connect();
+          }),
+        if (_error != null) TextButton(onPressed: _busy ? null : _connect, child: const Text('다시 연결')),
         if (_busy) const LinearProgressIndicator(),
         if (_error != null) SelectableText(_error!, style: const TextStyle(color: Colors.red)),
         if (_api != null && !_busy && _cities.isEmpty) const Text('조회 가능한 도시가 없습니다. 서버의 API 키와 활용 승인을 확인해주세요.'),
