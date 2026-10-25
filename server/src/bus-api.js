@@ -1,25 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { providerKey, providerName, providerConfigured, stopEnvironment } from './bus-provider.js';
-import { tagoCities, searchTagoStops, tagoKey } from './tago-catalog.js';
-import { searchBusanStops } from './busan-provider.js';
-import { reserveProviderRequest } from './bus-quota.js';
+import { providerKey, providerName, stopEnvironment } from './bus-provider.js';
+import { catalogCities, searchCatalog } from './stop-catalog.js';
 import { ApiError } from './planner.js';
 import { arrivalsView, predictArrival, refreshStop } from './bus-history.js';
-let cityCache;
-async function availableCities(db) {
-  const env=process.env;
-  const cities=env.BUSAN_SERVICE_KEY?.trim() ? [{provider:'busan',cityCode:null,name:'부산광역시'}] : [];
-  const keys=[tagoKey(env,'ArvlInfoInqireService'),tagoKey(env,'BusSttnInfoInqireService')];
-  const cacheKey=JSON.stringify(keys);
-  if(keys.every(Boolean)) {
-    if(!cityCache || cityCache.key!==cacheKey || cityCache.expires<Date.now()) {
-      const rows=await tagoCities(env,()=>reserveProviderRequest(db));
-      cityCache={key:cacheKey,rows,expires:Date.now()+3600000};
-    }
-    cities.push(...cityCache.rows);
-  }
-  return cities;
-}
 const text = v => typeof v==='string' && v.length>0 && v.length<200;
 async function stopById(db,id) {
   if (!text(id)) throw new ApiError('INVALID_STOP_ID');
@@ -30,28 +13,17 @@ async function stopById(db,id) {
 export async function busApi(request,db,user,admin,path) {
   if(!path.startsWith('/api/bus/')) return null;
   const url=new URL(request.url),method=request.method;
-  if(path==='/api/bus/cities'&&method==='GET') return Response.json({cities:await availableCities(db)});
+  if(path==='/api/bus/cities'&&method==='GET') return Response.json({cities:await catalogCities(db)});
   if(path==='/api/bus/stops/search'&&method==='GET') {
     const provider=url.searchParams.get('provider')??(process.env.BUS_PROVIDER==='auto'?'busan':providerName(process.env));
     const cityCode=url.searchParams.get('cityCode');
     if(!['busan','tago'].includes(provider)) throw new ApiError('UNSUPPORTED_BUS_PROVIDER',409);
-    if(!providerConfigured({...process.env,BUS_PROVIDER:provider})) throw new ApiError('BUS_PROVIDER_NOT_CONFIGURED',503);
     const query=(url.searchParams.get('q')??'').trim(),arsNo=url.searchParams.get('arsNo');
     const page=Number(url.searchParams.get('page')??1);
     if((arsNo!==null&&!(provider==='busan'?/^\d{5}$/:/^\d{1,10}$/).test(arsNo))||(!arsNo&&(query.length<2||query.length>50))||
       !Number.isInteger(page)||page<1||page>1000) throw new ApiError('INVALID_STOP_SEARCH');
-    if(provider==='tago' && !(await availableCities(db)).some(c=>c.provider==='tago'&&c.cityCode===cityCode)) throw new ApiError('UNSUPPORTED_CITY',409);
-    await reserveProviderRequest(db);
-    const result=provider==='busan' ? await searchBusanStops({query,arsNo,page}) : await searchTagoStops({query,arsNo,page,cityCode});
-    await db.transaction(async()=>{
-      for(const stop of result.stops) await db.prepare(`INSERT INTO stops
-        (id,name,latitude,longitude,provider_stop_id,provider_ars_no,provider_city_code,provider) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-        ON CONFLICT(id) DO UPDATE SET name=excluded.name,latitude=excluded.latitude,
-          longitude=excluded.longitude,provider_stop_id=excluded.provider_stop_id,provider_ars_no=excluded.provider_ars_no,provider_city_code=excluded.provider_city_code,provider=excluded.provider,
-          updated_at=to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`)
-        .run(stop.id,stop.name,stop.latitude,stop.longitude,stop.providerStopId,stop.arsNo,stop.cityCode??null,provider);
-    });
-    return Response.json({...result,basis:'provider_catalog',provider,cityCode:provider==='tago'?cityCode:null});
+    if(provider==='tago' && !(await catalogCities(db)).some(c=>c.provider==='tago'&&c.cityCode===cityCode)) throw new ApiError('UNSUPPORTED_CITY',409);
+    return Response.json(await searchCatalog(db,{provider,cityCode:provider==='tago'?cityCode:null,query,arsNo,page}));
   }
   if(path==='/api/bus/stops'&&method==='GET') {
     const q=(url.searchParams.get('q')??'').trim().slice(0,100);

@@ -230,7 +230,7 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 
 실제 서버 인증키는 위 명령으로 운영 서버에 입력해야 한다. 이 저장소에 인증키 원문은 포함하지 않는다.
 
-1. `GET /api/bus/stops/search?q=부산시청` 또는 `?arsNo=13708`: 부산 `busStopList`를 조회하고 이름·위경도·정류소 ID(`bstopid`)·ARS 번호를 PostgreSQL에 자동 upsert한다. `page`는 1부터 시작하며 페이지당 100개다. 반환된 `totalCount`를 보고 필요한 다음 페이지만 요청한다. 정류소명 검색은 2~50자, ARS 번호는 앞자리 0을 보존한 5자리 문자열이다.
+1. `GET /api/bus/stops/search?q=부산시청` 또는 `?arsNo=13708`: 월간 동기화로 PostgreSQL에 저장한 이름·위경도·정류소 ID(`bstopid`)·ARS 번호를 조회한다. 사용자 검색에서는 공공 API를 호출하지 않는다. `page`는 1부터 시작하며 페이지당 100개다. 반환된 `totalCount`를 보고 필요한 다음 페이지만 요청한다. 정류소명 검색은 2~50자, ARS 번호는 앞자리 0을 보존한 5자리 문자열이다.
 2. 검색 결과 `id`(형식 `busan-<bstopid>`)로 `GET /api/bus/routes?stopId=...`를 조회한다. 서버는 `stopArrByBstopid`의 노선ID(`lineid`), 버스번호(`lineno`), 앞차·뒷차 정보를 받아 공통 캐시에 저장한다. 숫자 대기시간이 없어도 공급자 응답에 노선이 있으면 저장 가능한 노선 목록에 유지한다.
 3. 반환된 `routeId`(형식 `busan-<lineid>`)와 정류소 `id`를 `POST /api/bus/subscriptions`로 저장한다. 앱은 ARS 번호나 표시용 버스번호를 내부 ID 대신 사용하지 않는다. 부산 자동 검색 결과에는 별도 TAGO 도시코드/수동 매핑이 필요 없다.
 4. `GET /api/bus/arrivals?stopId=...`로 첫·다음 버스의 실시간 대기시간을 조회한다. 저장한 노선은 기존 백그라운드 수집과 90일 이력 기반 추정을 그대로 사용한다.
@@ -239,7 +239,7 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 
 부산 노선/정류소에는 `busan-` 접두사를 붙여 TAGO·수동 카탈로그 ID와 충돌을 줄인다. 노선 목록은 부산 응답에 포함된 노선과 DB 카탈로그를 합친 결과이며 공급자 누락까지 보완하는 전체 노선 DB 동기화는 아니다. 첫/다음 차량이 모두 없으면 실시간 숫자 도착값을 만들지 않고 이력 추정 또는 자료 부족으로 반환한다. 좌표는 정류소 좌표이며 사용자의 위치 추적 구조는 변경하지 않는다.
 
-공급자 검색과 도착정보 수집은 같은 일일 호출 상한을 공유한다. 성공 외 결과코드, XML 오류와 통신 장애는 구분된 오류로 처리한다. 운영 키 검증은 실제 공급자 통신이 가능한 서버에서 확인해야 한다.
+월간 정류장 목록 수집과 도착정보 수집은 같은 일일 호출 상한을 공유한다. 사용자 검색은 DB만 조회하므로 이 한도를 사용하지 않는다. 성공 외 결과코드, XML 오류와 통신 장애는 구분된 오류로 처리한다. 운영 키 검증은 실제 공급자 통신이 가능한 서버에서 확인해야 한다.
 
 ## 도시별 실시간 연동
 
@@ -250,7 +250,7 @@ docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml up -d --bu
 | 부산 BIMS | busStopList: bstopnm 또는 arsno | stopArrByBstopid: bstopid | 분 → 초 |
 | TAGO 제공 도시 | BusSttnInfoInqireService/getSttnNoList: cityCode + nodeNm 또는 nodeNo | ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList: cityCode + nodeId | 초 |
 
-- `GET /api/bus/cities`: 키가 설정된 부산과 TAGO 정류소/도착정보 양쪽 도시코드 목록의 교집합을 반환한다. TAGO 목록은 성공 시 1시간 메모리 캐시하며 공급자 호출마다 일일 한도를 차감한다. 키 문자열을 응답이나 로그에 노출하지 않는다.
+- `GET /api/bus/cities`: 키가 설정된 부산과 TAGO 정류소/도착정보 양쪽 도시코드 목록의 교집합을 반환한다. 도시 목록은 DB에서 읽으며 TAGO 도시 목록은 백그라운드에서 최초 및 한 달마다 갱신한다. 키 문자열을 응답이나 로그에 노출하지 않는다.
 - `GET /api/bus/stops/search?provider=busan&q=부산역`
 - `GET /api/bus/stops/search?provider=tago&cityCode=25&q=시청&page=1`
 - 번호 검색은 `q` 대신 `arsNo`를 사용한다. 부산은 앞자리 0을 보존한 5자리, TAGO는 1~10자리다. 페이지당 100개다.
@@ -293,3 +293,20 @@ SMTP와 서명키는 서버에만 입력하며 앱 빌드에 넣지 않습니다
 링크와 OTP는 모두 기본 10분 동안 유효하며 한 번만 사용할 수 있습니다. 재발송 시 이전 요청은 무효화됩니다. 이메일 제목과 HTML은 버스타이머 전용이며 크림색 배경, 초록 버튼, 둥근 카드로 웹 스타일을 반영합니다.
 
 업데이트 후 Flutter 의존성을 설치(`flutter pub get`)하고 웹/앱 및 API Compose를 다시 빌드합니다. API 시작 시 `0006_email_auth.sql` 마이그레이션이 자동 적용됩니다. 기존 관리자 API 인증은 유지합니다. 기존 수동 발급 기기 토큰의 데이터는 자동 게스트로 옮기지 않으므로 필요 시 관리자 이관이 별도로 필요합니다.
+
+## 정류장 목록 월간 동기화
+
+- 서버 시작 직후 최초 수집을 시작한다. 등록된 부산 및 TAGO 각 도시별로 마지막 성공 시점에서 PostgreSQL의 `interval '1 month'`가 지난 뒤 다시 갱신한다. 서버가 중단돼 있었다면 재시작 후 미완료·기한 경과 작업을 처리한다.
+- 1분마다 최대 5페이지(페이지당 100개)를 순차 수집한다. 검색어·번호 필터를 보내지 않고 전체 목록을 페이지별로 요청한다. TAGO 도시 발견에는 정류소/도착정보 키 양쪽이 필요하다.
+- 수집 커서와 임시 데이터는 DB에 저장하므로 재시작 후 이어간다. DB advisory lock으로 여러 서버의 동시 수집을 방지한다.
+- 각 도시의 전체 건수·페이지 수집 결과·고유 정류장 개수가 일치해야 한 트랜잭션으로 새 검색 목록을 게시한다. 오류 시 임시 데이터를 폐기하고 1시간 뒤 처음부터 재시도하며 마지막 성공 목록을 유지한다.
+- 월간 목록에서 빠진 정류장은 검색 대상에서 제외하지만 `stops`와 구독·이력을 삭제하지 않는다. 최초 전환 때 이미 저장돼 있던 정류장은 초기 수집 완료 전에도 검색 가능하다.
+- `/api/bus/cities`와 `/api/bus/stops/search`는 DB만 조회한다. 검색 응답은 `basis=database_catalog`, `syncedAt`, `refreshPending`을 포함한다. 초기 적재 중 데이터가 없는 검색은 `BUS_CATALOG_NOT_READY`로 안내한다.
+- ARS 번호 없는 마을 정류장도 저장·검색하며 화면에서 번호를 생략한다. 실시간 도착정보 조회·수집 주기는 바꾸지 않는다.
+- 마이그레이션은 서버 시작 시 자동 적용된다. 운영 키로 전체 목록 수집 성공 여부는 배포 후 로그와 아래 SQL로 확인한다.
+
+```sql
+SELECT provider,city_code,name,synced_at,next_attempt_at,page,expected_total,last_error
+FROM bus_catalog_regions ORDER BY provider,city_code;
+SELECT provider,city_code,count(*) FROM bus_catalog_entries GROUP BY provider,city_code;
+```

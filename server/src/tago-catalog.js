@@ -62,7 +62,7 @@ export async function tagoCities(env = process.env, reserve = async()=>{}) {
 export async function searchTagoStops({query,arsNo,cityCode,page=1},env=process.env) {
   if(!/^\d{1,8}$/.test(cityCode??'')) throw new ApiError('CITY_CODE_REQUIRED');
   const result=await requestTago('BusSttnInfoInqireService','getSttnNoList',{
-    cityCode,pageNo:page,numOfRows:100,...(arsNo?{nodeNo:arsNo}:{nodeNm:query})},env);
+    cityCode,pageNo:page,numOfRows:100,...(arsNo?{nodeNo:arsNo}:query?{nodeNm:query}:{})},env);
   const stops=result.rows.map(row=>{
     const latitude=Number(row.gpslati),longitude=Number(row.gpslong);
     if(!/^[\w-]{1,100}$/.test(row.nodeid??'')||!row.nodenm||
