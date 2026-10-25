@@ -13,7 +13,6 @@ class JourneyHomePage extends StatefulWidget {
 }
 
 class _JourneyHomePageState extends State<JourneyHomePage> {
-  final _token = TextEditingController();
   final _base = TextEditingController(text: const String.fromEnvironment('BUS_API_URL', defaultValue: 'https://bustimer.bluewaikiki.top'));
   final _notifications = FlutterLocalNotificationsPlugin();
   JourneyService? _api;
@@ -27,8 +26,14 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
   final Set<String> _shown = {};
 
   @override
+  void initState() {
+    super.initState();
+    _connect();
+  }
+
+  @override
   void dispose() {
-    _timer?.cancel(); _api?.dispose(); _token.dispose(); _base.dispose();
+    _timer?.cancel(); _api?.dispose(); _base.dispose();
     super.dispose();
   }
 
@@ -41,10 +46,10 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
 
   Future<void> _connect() => _run(() async {
     final uri = Uri.tryParse(_base.text.trim());
-    if (uri == null || !uri.hasAuthority || !['http','https'].contains(uri.scheme) || _token.text.trim().isEmpty) {
-      throw Exception('서버 주소와 기기 토큰을 입력해주세요.');
+    if (uri == null || !uri.hasAuthority || !['http','https'].contains(uri.scheme)) {
+      throw Exception('서버 주소를 확인해주세요.');
     }
-    _api?.dispose(); _api = JourneyService(token: _token.text.trim(), baseUrl: _base.text.trim());
+    _api?.dispose(); _api = await JourneyService.connect(baseUrl: _base.text.trim());
     final stops = await _api!.request('journey-stops');
     final saved = await _api!.request('saved-journeys');
     final sessions = await _api!.request('journey-sessions');
@@ -220,11 +225,9 @@ class _JourneyHomePageState extends State<JourneyHomePage> {
 
   Widget _settings() => _card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     _heading('설정', '연결과 알림을 관리해요.'),
-    _notice(Icons.dns_outlined, _stops.isNotEmpty ? '서버 연결됨' : '서버에 연결해주세요', '개인 기기 토큰으로 나의 저장 경로와 이동 정보를 불러와요.'),
+    _notice(Icons.dns_outlined, _stops.isNotEmpty ? '서버 연결됨' : '서버에 연결해주세요', '저장 경로와 이동 정보를 자동으로 불러와요.'),
     const SizedBox(height: 12), TextField(controller: _base, decoration: const InputDecoration(labelText: '앱 서버 주소')),
-    const SizedBox(height: 12), TextField(controller: _token, obscureText: true, decoration: const InputDecoration(labelText: '개인 기기 토큰')),
-    const SizedBox(height: 12), FilledButton(onPressed: _busy ? null : _connect, child: const Text('연결')),
-    const SizedBox(height: 12), const Text('기기 토큰은 서버 관리자가 발급합니다. 현재 연결 정보는 앱 종료 시 초기화됩니다.'),
+    const SizedBox(height: 12), FilledButton(onPressed: _busy ? null : _connect, child: const Text('다시 연결')),
     const Divider(), FilledButton.tonal(onPressed: _busy ? null : _enableNotifications, child: Text(_notify ? '알림 권한 확인 완료' : '승차·환승 알림 켜기')),
     const SizedBox(height: 12), const Text('현재 알림은 앱 또는 웹 화면이 실행 중일 때 확인합니다. 앱 종료 상태의 푸시 알림은 별도 연동이 필요합니다. 위치 권한은 필요하지 않습니다.'),
   ]));

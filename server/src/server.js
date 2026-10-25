@@ -50,6 +50,24 @@ const server=createServer(async(req,res)=>{
     if(req.method==='OPTIONS'){res.writeHead(204,{...cors,'access-control-allow-methods':'GET,POST,DELETE,OPTIONS','access-control-allow-headers':'Content-Type,Authorization'});res.end();return;}
     if(path==='/health'){await db.prepare('SELECT 1').get();res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');return;}
     await db.withConnection(async()=>{
+    // Public guest registration removes manual provisioning. Each installation
+    // retains its own user; administrative routes still require the admin bearer.
+    if(path==='/api/auth/guest' && req.method==='POST') {
+      let size=0;
+      for await(const chunk of req) {
+        size+=chunk.length;
+        if(size>1024) throw new ApiError('BODY_TOO_LARGE',413);
+      }
+      const created=await db.transaction(async()=>{
+        const userId=randomUUID(),token=randomBytes(32).toString('base64url');
+        await db.prepare('INSERT INTO users(id) VALUES($1)').run(userId);
+        await db.prepare('INSERT INTO api_devices(token_hash,user_id,label) VALUES($1,$2,$3)')
+          .run(hash(token),userId,'guest');
+        return {token};
+      });
+      res.writeHead(201,{'content-type':'application/json',...cors,'cache-control':'no-store'});
+      res.end(JSON.stringify(created));return;
+    }
     const bearer=(req.headers.authorization??'').replace(/^Bearer /,'');
     const admin=Boolean(process.env.API_BEARER_TOKEN)&&equal(bearer,process.env.API_BEARER_TOKEN);
     const device=bearer?(await db.prepare(`SELECT user_id FROM api_devices WHERE token_hash=$1`).get(hash(bearer))):null;
