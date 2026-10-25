@@ -60,10 +60,12 @@ export async function requestBusan(operation, params, env = process.env) {
 export async function searchBusanStops({query,arsNo,page=1}, env = process.env) {
   const result=await requestBusan('busStopList',{pageNo:page,numOfRows:100,...(arsNo?{arsno:arsNo}:{bstopnm:query})},env);
   const stops=result.rows.map(row=>{
+    // Village-bus stops can omit the public ARS number; bstopid remains required.
+    const arsNo=row.arsno==null||row.arsno==='' ? null:row.arsno;
     if(!id(row.bstopid)||!row.bstopnm||!numeric(row.gpsx)||!numeric(row.gpsy)||
-      Number(row.gpsx)>180||Number(row.gpsy)>90||Number(row.gpsy)<-90||!/^\d{1,5}$/.test(row.arsno??'')) throw new ApiError('BUS_PROVIDER_INVALID_STOP',502);
+      Number(row.gpsx)>180||Number(row.gpsy)>90||Number(row.gpsy)<-90||(arsNo!==null&&(typeof arsNo!=='string'||!/^\d{1,5}$/.test(arsNo)))) throw new ApiError('BUS_PROVIDER_INVALID_STOP',502);
     return {id:`busan-${row.bstopid}`,name:row.bstopnm.slice(0,199),latitude:Number(row.gpsy),longitude:Number(row.gpsx),
-      providerStopId:row.bstopid,arsNo:row.arsno.padStart(5,'0')};
+      providerStopId:row.bstopid,arsNo:arsNo===null?null:arsNo.padStart(5,'0')};
   });
   return {stops,totalCount:result.totalCount,page,pageSize:100};
 }
