@@ -58,7 +58,7 @@ export async function requestBusan(operation, params, env = process.env) {
 }
 
 export async function searchBusanStops({query,arsNo,page=1}, env = process.env) {
-  const result=await requestBusan('busStopList',{pageNo:page,numOfRows:100,...(arsNo?{arsno:arsNo}:{bstopnm:query})},env);
+  const result=await requestBusan('busStopList',{pageNo:page,numOfRows:100,...(arsNo?{arsno:arsNo}:query?{bstopnm:query}:{})},env);
   const stops=result.rows.map(row=>{
     // Village-bus stops can omit the public ARS number; bstopid remains required.
     const arsNo=row.arsno==null||row.arsno==='' ? null:row.arsno;
