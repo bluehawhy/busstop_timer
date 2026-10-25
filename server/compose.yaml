@@ -47,7 +47,7 @@ services:
       - default
       - database
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18082/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "const fs=require('node:fs');const path=require('node:path');for(const file of ['index.html','flutter_bootstrap.js','main.dart.js'])fs.accessSync(path.join(process.env.WEB_ROOT||'/app/web',file),fs.constants.R_OK);fetch('http://127.0.0.1:18082/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
