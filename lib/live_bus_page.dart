@@ -103,7 +103,8 @@ class _LiveBusPageState extends ConsumerState<LiveBusPage> {
           ], onChanged: _busy ? null : (value) => setState(() { _city = value; _stops = []; _routes = []; _stop = null; _total = 0; _page = 1; })),
           TextField(controller: _query, enabled: !_busy, decoration: const InputDecoration(labelText: '정류장 이름 또는 번호'), onSubmitted: (_) { if (!_busy) _search(1); }),
           FilledButton(onPressed: _busy ? null : () => _search(1), child: const Text('정류장 검색')),
-          for (final s in _stops) ListTile(title: Text('${s['name']}'), subtitle: Text('${s['arsNo'] ?? s['providerStopId']}'),
+          for (final s in _stops) ListTile(title: Text('${s['name']}'), subtitle: s['arsNo'] == null || '${s['arsNo']}'.trim().isEmpty
+              ? null : Text('${s['arsNo']}'),
             selected: _stop?['id'] == s['id'], onTap: _busy ? null : () => _run(() async {
               final result = await _api!.request('bus/routes?${Uri(queryParameters: {'stopId': '${s['id']}'}).query}');
               if (mounted) setState(() { _stop = Map<String,dynamic>.from(s as Map); _routes = result['routes'] as List<dynamic>; });
