@@ -41,7 +41,8 @@ class _LiveBusPageState extends ConsumerState<LiveBusPage> {
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
     setState(() { _busy = true; _error = null; });
-    try { await action(); } catch (e) { if (mounted) setState(() => _error = e.toString()); }
+    try { await action(); } catch (e) { if (mounted) setState(() => _error = e.toString().contains('BUS_CATALOG_NOT_READY')
+      ? '정류장 목록을 준비하고 있습니다. 잠시 후 다시 검색해주세요.' : e.toString()); }
     finally { if (mounted) setState(() => _busy = false); }
   }
 
@@ -96,7 +97,7 @@ class _LiveBusPageState extends ConsumerState<LiveBusPage> {
         if (_error != null) TextButton(onPressed: _busy ? null : _connect, child: const Text('다시 연결')),
         if (_busy) const LinearProgressIndicator(),
         if (_error != null) SelectableText(_error!, style: const TextStyle(color: Colors.red)),
-        if (_api != null && !_busy && _cities.isEmpty) const Text('조회 가능한 도시가 없습니다. 서버의 API 키와 활용 승인을 확인해주세요.'),
+        if (_api != null && !_busy && _cities.isEmpty) const Text('정류장 목록을 준비 중이거나 조회 가능한 도시가 없습니다. 잠시 후 다시 연결해주세요.'),
         if (_cities.isNotEmpty) ...[
           DropdownButton<int>(value: _city, isExpanded: true, items: [
             for (var i = 0; i < _cities.length; i++) DropdownMenuItem(value: i, child: Text('${_cities[i]['name']} (${_cities[i]['provider']})')),
