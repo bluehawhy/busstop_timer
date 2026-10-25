@@ -7,6 +7,7 @@ import { journeyApi, evaluateSession } from './journeys.js';
 import legacy from './index.js';
 import { busApi } from './bus-api.js';
 import { collectSavedArrivals } from './bus-history.js';
+import { emailAuth, emailLinkLanding } from './email-auth.js';
 import { ApiError } from './planner.js';
 
 const db=await openDatabase();
@@ -50,9 +51,29 @@ const server=createServer(async(req,res)=>{
     if(req.method==='OPTIONS'){res.writeHead(204,{...cors,'access-control-allow-methods':'GET,POST,DELETE,OPTIONS','access-control-allow-headers':'Content-Type,Authorization'});res.end();return;}
     if(path==='/health'){await db.prepare('SELECT 1').get();res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');return;}
     await db.withConnection(async()=>{
+    if(path==='/api/auth/verify') {
+      const chunks=[];let size=0;
+      for await(const chunk of req) {size+=chunk.length;if(size>2048) throw new ApiError('BODY_TOO_LARGE',413);chunks.push(chunk);}
+      const request=new Request(`http://localhost${base}${path}${url.search}`,{method:req.method,headers:req.headers,
+        ...(['GET','HEAD'].includes(req.method)?{}:{body:Buffer.concat(chunks)})});
+      const response=await emailLinkLanding(request,db);
+      res.writeHead(response.status,{...Object.fromEntries(response.headers),...cors});
+      res.end(Buffer.from(await response.arrayBuffer()));return;
+    }
+    if(path==='/api/auth/guest' && req.method==='POST') {
+      let size=0;
+      for await(const chunk of req){size+=chunk.length;if(size>1024) throw new ApiError('BODY_TOO_LARGE',413);}
+      const created=await db.transaction(async()=>{
+        const user=randomUUID(),token=randomBytes(32).toString('base64url');
+        await db.prepare('INSERT INTO users(id) VALUES($1)').run(user);
+        await db.prepare('INSERT INTO api_devices(token_hash,user_id,label) VALUES($1,$2,$3)').run(hash(token),user,'guest');
+        return {token};
+      });
+      res.writeHead(201,{'content-type':'application/json',...cors,'cache-control':'no-store'});res.end(JSON.stringify(created));return;
+    }
     const bearer=(req.headers.authorization??'').replace(/^Bearer /,'');
     const admin=Boolean(process.env.API_BEARER_TOKEN)&&equal(bearer,process.env.API_BEARER_TOKEN);
-    const device=bearer?(await db.prepare(`SELECT user_id FROM api_devices WHERE token_hash=$1`).get(hash(bearer))):null;
+    const device=bearer?(await db.prepare(`SELECT user_id FROM api_devices WHERE token_hash=$1 AND (expires_at IS NULL OR expires_at>NOW())`).get(hash(bearer))):null;
     if(!admin&&!device) throw new ApiError('UNAUTHORIZED',401);
     const chunks=[];let size=0;
     for await(const chunk of req){size+=chunk.length;if(size>4*1024*1024) throw new ApiError('BODY_TOO_LARGE',413);chunks.push(chunk);}
@@ -65,7 +86,8 @@ const server=createServer(async(req,res)=>{
       ...(['GET','HEAD'].includes(req.method)?{}:{body})});
     // New endpoints derive user ownership from a device token, never request userId.
     if(admin) await db.prepare('INSERT INTO users(id) VALUES($1) ON CONFLICT DO NOTHING').run('admin');
-    let response=await busApi(request,db,device?.user_id??'admin',admin,path);
+    let response=device?await emailAuth(request,db,device,bearer,path,process.env.AUTH_TRUST_PROXY==='true' ? String(req.headers['x-forwarded-for']??req.socket.remoteAddress??'unknown').split(',').at(-1).trim() : (req.socket.remoteAddress??'unknown')):null;
+    if(!response) response=await busApi(request,db,device?.user_id??'admin',admin,path);
     if(!response) response=await journeyApi(request,db,device?.user_id??'admin',admin,path);
     if(!response&&admin) response=await legacy.fetch(request,{...process.env,DB:legacyDatabase(db)});
     if(!response) throw new ApiError('NOT_FOUND',404);
@@ -77,7 +99,9 @@ const server=createServer(async(req,res)=>{
   }catch(e){
     const status=e instanceof ApiError?e.status:e instanceof SyntaxError?400:500;
     if(status===500) console.error('API error:',e.message);
-    if(!res.headersSent) res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});
+    const errorOrigin=req.headers.origin;
+    const errorCors=errorOrigin&&allowed.includes(errorOrigin)?{'access-control-allow-origin':errorOrigin,'vary':'Origin'}:{};
+    if(!res.headersSent) res.writeHead(status,{'content-type':'application/json','cache-control':'no-store',...errorCors});
     res.end(JSON.stringify({error:status===500?'INTERNAL_ERROR':e.message}));
   }
 });

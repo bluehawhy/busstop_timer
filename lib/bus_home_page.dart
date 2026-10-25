@@ -1,3 +1,4 @@
+import 'email_auth_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -513,8 +514,12 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           ),
           const SizedBox(height: 14),
           _settingsGroup(children: [
-            _settingsRow(icon: Icons.route_rounded, title: '경로 검색·서버 연결',
-              subtitle: '기존 토큰 연결과 경로 비교 화면',
+            _settingsRow(icon: Icons.email_outlined, title: '이메일 인증',
+              subtitle: '이메일 로그인과 기기 간 저장 정보 동기화',
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EmailAuthPage()))),
+            _settingsRow(icon: Icons.route_rounded, title: '경로 검색',
+              subtitle: '직행·환승 경로 비교',
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const JourneyHomePage()))),
           ]),
