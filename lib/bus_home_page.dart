@@ -118,8 +118,14 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
       body: SafeArea(child: _pageForIndex(buses)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _selectedIndex = index),
+        onDestinationSelected: (index) => setState(() {
+          _selectedIndex = index;
+          if (index != 0) {
+            // The map recreates its annotations when Home is reopened.
+            _selectedMapStop = null;
+            _selectedMapRoute = null;
+          }
+        }),
         destinations: _destinations.map((item) => NavigationDestination(
           icon: Icon(item.icon),
           label: item.label,
