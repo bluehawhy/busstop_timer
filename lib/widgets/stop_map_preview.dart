@@ -21,6 +21,10 @@ class StopMapPreview extends ConsumerStatefulWidget {
 
 class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
   static const _busan = LatLng(35.1796, 129.0756);
+  // Compact, outlined transit stops stay legible without dominating the map.
+  static const _stopFill = '#F9FDFB';
+  static const _stopOutline = '#438985';
+  static const _selectedStopFill = '#F36A2B';
   static const _routePalette = [
     '#F36A2B', '#EA1658', '#7BC65B', '#F5AE16', '#009CA5',
   ];
@@ -29,6 +33,7 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
   JourneyService? _api;
   bool _ready = false, _loading = false, _pending = false, _zoomRequired = false;
   bool _truncated = false, _saving = false;
+  double _stopRadius = 4.2;
   String? _error, _routeNotice;
   Map<String, dynamic>? _selectedStop, _selectedRoute;
   List<Map<String, dynamic>> _routes = [];
@@ -121,6 +126,10 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
       _stopsBySymbol.clear();
       _stopsByCircle.clear();
       _circleByStop.clear();
+      // A quiet metro-atlas symbol: off-white center, muted teal edge.
+      // At a wider extent the dot becomes smaller rather than obscuring roads.
+      _stopRadius = north - south > 0.05 ? 3.2
+          : north - south > 0.018 ? 4.2 : 5.1;
       final circles = await controller.addCircles([
         for (final stop in stops)
           CircleOptions(
@@ -129,20 +138,24 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
               (stop['longitude'] as num).toDouble(),
             ),
             circleColor: stop['id'] == _selectedStop?['id']
-                ? '#EA1658' : '#2563EB',
-            circleRadius: stop['id'] == _selectedStop?['id'] ? 10 : 6.5,
-            circleStrokeColor: '#FFFFFF',
-            circleStrokeWidth: 2.5,
+                ? _selectedStopFill : _stopFill,
+            circleRadius: stop['id'] == _selectedStop?['id']
+                ? 8.5 : _stopRadius,
+            circleStrokeColor: stop['id'] == _selectedStop?['id']
+                ? '#FFFFFF' : _stopOutline,
+            circleStrokeWidth: stop['id'] == _selectedStop?['id']
+                ? 3 : 1.7,
           ),
       ]);
       for (var i = 0; i < circles.length; i++) {
         _stopsByCircle[circles[i].id] = stops[i];
         _circleByStop['${stops[i]['id']}'] = circles[i];
       }
-      // Labels follow the user's zoom level to avoid crowding.
-      if (north - south < 0.075) {
-        final named = north - south < 0.028;
-        final labelled = stops.take(named ? 50 : 75).toList();
+      // Only label nearby stops at close zoom; dense numbers must not
+      // compete with the map title or the selected route.
+      if (north - south < 0.018) {
+        final named = north - south < 0.009;
+        final labelled = stops.take(named ? 25 : 18).toList();
         final symbols = await controller.addSymbols([
           for (final stop in labelled)
             SymbolOptions(
@@ -150,10 +163,10 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
                 (stop['longitude'] as num).toDouble()),
               textField: named ? '${stop['name']}'
                 : (stop['arsNo']?.toString() ?? ''),
-              textSize: named ? 11 : 10,
-              textColor: '#475569',
-              textHaloColor: '#FFFFFF',
-              textHaloWidth: 1.7,
+              textSize: named ? 10.5 : 10,
+              textColor: '#566A72',
+              textHaloColor: '#F9FDFB',
+              textHaloWidth: 1.8,
               textAnchor: 'top',
               textOffset: const Offset(0, 0.9),
             ),
@@ -183,14 +196,20 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
     final previousId = _selectedStop?['id']?.toString();
     final previous = _circleByStop[previousId];
     if (previous != null && controller != null) {
-      await controller.updateCircle(previous, const CircleOptions(
-        circleColor: '#2563EB', circleRadius: 6.5,
+      await controller.updateCircle(previous, CircleOptions(
+        circleColor: _stopFill,
+        circleRadius: _stopRadius,
+        circleStrokeColor: _stopOutline,
+        circleStrokeWidth: 1.7,
       ));
     }
     final selected = _circleByStop['${stop['id']}'];
     if (selected != null && controller != null) {
       await controller.updateCircle(selected, const CircleOptions(
-        circleColor: '#EA1658', circleRadius: 10,
+        circleColor: _selectedStopFill,
+        circleRadius: 8.5,
+        circleStrokeColor: '#FFFFFF',
+        circleStrokeWidth: 3,
       ));
     }
     if (!mounted) return;
@@ -252,11 +271,18 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
             item[0] is! num || item[1] is! num) return;
         points.add(LatLng((item[1] as num).toDouble(), (item[0] as num).toDouble()));
       }
+      // A neutral border separates the verified transit route from roads.
+      await controller?.addLine(LineOptions(
+        geometry: points,
+        lineColor: '#FFFFFF',
+        lineWidth: 10,
+        lineOpacity: 0.98,
+      ));
       await controller?.addLine(LineOptions(
         geometry: points,
         lineColor: _routeColor(id),
         lineWidth: 6,
-        lineOpacity: 0.95,
+        lineOpacity: 0.96,
       ));
       if (mounted) setState(() => _routeNotice = '확인된 경로 · ${result['source']}');
     } catch (_) {

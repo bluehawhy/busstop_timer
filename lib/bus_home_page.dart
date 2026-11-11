@@ -218,6 +218,19 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
         Positioned.fill(child: StopMapPreview(
           route: nextBus?.busNum, arrival: nextBus?.remain,
           onBusTap: nextBus == null ? null : () => _openArrival(nextBus))),
+        // A light veil keeps headings legible while preserving the map.
+        Positioned(
+          left: 0, right: 0, top: 0, height: 116,
+          child: IgnorePointer(child: DecoratedBox(
+            decoration: BoxDecoration(gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFFF3F5F3).withValues(alpha: 0.97),
+                const Color(0xFFF3F5F3).withValues(alpha: 0),
+              ],
+            )),
+          )),
+        ),
         Positioned(top: 22, left: 22, right: 22, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('버스 정류장 지도', style: AppTextStyles.pageTitle),
           const SizedBox(height: 4),
@@ -228,7 +241,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
               child: const Padding(padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                 child: Row(children: [Icon(Icons.search, color: AppColors.secondaryText), SizedBox(width: 10),
                   Expanded(child: Text('정류장이나 버스 번호를 검색하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 13)))]))))),
-            const SizedBox(width: 10), IconButton.filled(tooltip: '지도 안내', onPressed: () => _showMessage('정류장 지도', '지도의 파란 원을 눌러 정류장과 노선을 확인하세요. 공식 노선 경로가 등록되어 있는 경우에만 컬러 경로가 표시됩니다.'),
+            const SizedBox(width: 10), IconButton.filled(tooltip: '지도 안내', onPressed: () => _showMessage('정류장 지도', '지도 위 작은 원형 정류장을 눌러 노선을 확인하세요. 공식 노선 경로가 등록되어 있는 경우에만 컬러 경로가 표시됩니다.'),
               icon: const Icon(Icons.my_location_rounded))]),
         ])),
         if (wide) Positioned(left: 24, bottom: 24, width: 390, child: ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.6), child: SingleChildScrollView(child: panel)))
