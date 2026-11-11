@@ -269,11 +269,9 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
     final nextBus = sorted.isEmpty ? null : sorted.first;
     final stopName = _selectedMapStop?['name']?.toString();
     return LayoutBuilder(builder: (context, constraints) {
-      final visibleBuses = stopName == null
-          ? sorted.take(2).toList()
-          : sorted.where((bus) => bus.station == stopName &&
-              (_selectedMapRoute == null ||
-               bus.busNum == '${_selectedMapRoute?['routeName']}')).take(2).toList();
+      // This banner lists the user's actual saved buses. Stop names are not
+      // unique identifiers, so never infer a subscription by name alone.
+      final visibleBuses = sorted.take(2).toList();
       final panel = Container(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
         decoration: const BoxDecoration(
@@ -518,9 +516,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                     size: 24, color: Color(0xFF00877D)),
                   const SizedBox(width: 9),
                   Expanded(child: Text(
-                    _selectedMapStop == null
-                      ? '등록된 버스가 없어요. 정류장을 등록해주세요.'
-                      : '이 정류장에 등록된 노선의 도착정보가 없어요.',
+                    '등록된 버스가 없어요. 정류장을 등록해주세요.',
                     style: const TextStyle(fontSize: 12,
                       color: AppColors.ink, fontWeight: FontWeight.w600),
                   )),
