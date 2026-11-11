@@ -8,6 +8,7 @@ import 'journey_home_page.dart';
 import 'live_bus_page.dart';
 import 'services/journey_service.dart';
 import 'widgets/stop_map_preview.dart';
+import 'widgets/busan_map_regions.dart';
 
 class BusHomePage extends ConsumerStatefulWidget {
   const BusHomePage({super.key});
@@ -26,6 +27,9 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   final Set<String> _favorites = {};
   bool _restoringSavedBuses = false;
   String? _savedBusesError;
+  BusanMapRegion _selectedMapRegion = initialBusanMapRegion;
+  Map<String, dynamic>? _selectedMapStop;
+  Map<String, dynamic>? _selectedMapRoute;
 
   @override
   void initState() {
@@ -114,8 +118,14 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
       body: SafeArea(child: _pageForIndex(buses)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) =>
-            setState(() => _selectedIndex = index),
+        onDestinationSelected: (index) => setState(() {
+          _selectedIndex = index;
+          if (index != 0) {
+            // The map recreates its annotations when Home is reopened.
+            _selectedMapStop = null;
+            _selectedMapRoute = null;
+          }
+        }),
         destinations: _destinations.map((item) => NavigationDestination(
           icon: Icon(item.icon),
           label: item.label,
@@ -182,75 +192,391 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
     );
   }
 
+  Future<void> _selectMapDistrict() async {
+    final selected = await showModalBottomSheet<BusanMapRegion>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        final viewportHeight = MediaQuery.sizeOf(sheetContext).height;
+        return SafeArea(
+          child: SizedBox(
+            height: viewportHeight < 650 ? viewportHeight * 0.7 : 455,
+            child: Column(children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('부산광역시 · 구/군 선택',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+                      color: AppColors.ink)),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('선택한 구·군을 지도의 중심으로 이동합니다.',
+                    style: TextStyle(fontSize: 12, color: AppColors.secondaryText)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 18),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 9,
+                    crossAxisSpacing: 9,
+                    childAspectRatio: 2.5,
+                  ),
+                  itemCount: busanMapRegions.length,
+                  itemBuilder: (context, index) {
+                    final region = busanMapRegions[index];
+                    final active = region.district == _selectedMapRegion.district;
+                    return Material(
+                      color: active ? const Color(0xFFDEF4EF) : const Color(0xFFF4F7F8),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => Navigator.of(sheetContext).pop(region),
+                        child: Center(child: Text(region.district,
+                          style: TextStyle(
+                            color: active ? const Color(0xFF007969) : AppColors.ink,
+                            fontSize: 13, fontWeight: FontWeight.w700))),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+    if (!mounted || selected == null ||
+        selected.district == _selectedMapRegion.district) return;
+    setState(() {
+      _selectedMapRegion = selected;
+      _selectedMapStop = null;
+      _selectedMapRoute = null;
+    });
+  }
+
   Widget _homePage(List<BusArrivalInfo> buses) {
     final sorted = [...buses]..sort((a, b) => a.etaSeconds.compareTo(b.etaSeconds));
     final nextBus = sorted.isEmpty ? null : sorted.first;
+    final stopName = _selectedMapStop?['name']?.toString();
     return LayoutBuilder(builder: (context, constraints) {
-      final wide = constraints.maxWidth >= 760;
+      // This banner lists the user's actual saved buses. Stop names are not
+      // unique identifiers, so never infer a subscription by name alone.
+      final visibleBuses = sorted.take(2).toList();
       final panel = Container(
-        padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
-        decoration: const BoxDecoration(color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Center(child: Container(width: 42, height: 5, margin: const EdgeInsets.only(bottom: 18),
-            decoration: BoxDecoration(color: AppColors.inactive.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(4)))),
-          const Text('내 정류장', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          Row(children: [Expanded(child: Text(nextBus?.station ?? '정류장을 등록해주세요', style: AppTextStyles.pageTitle.copyWith(fontSize: 23))),
-            IconButton(tooltip: '정류장 찾기', onPressed: _openStopSearch, icon: const Icon(Icons.expand_more_rounded))]),
-          const Text('지도의 정류장을 눌러 버스 노선을 확인하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
-          if (_restoringSavedBuses) const LinearProgressIndicator(),
-          if (_savedBusesError != null)
-            TextButton.icon(
-              onPressed: _restoreSavedBuses,
-              icon: const Icon(Icons.refresh),
-              label: Text('$_savedBusesError · 다시 시도'),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(child: Container(
+              width: 42, height: 5,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC8D2D9),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            )),
+            Text(stopName == null ? '내 정류장' : '선택한 정류장',
+              style: const TextStyle(color: Color(0xFF007E70),
+                fontWeight: FontWeight.w800, fontSize: 13)),
+            const SizedBox(height: 8),
+            Row(children: [
+              if (stopName != null) ...[
+                const Icon(Icons.directions_bus_rounded,
+                  color: Color(0xFF008678), size: 28),
+                const SizedBox(width: 8),
+              ],
+              Expanded(child: Text(
+                stopName ?? nextBus?.station ?? '정류장을 등록해주세요',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.pageTitle.copyWith(fontSize: 22),
+              )),
+              IconButton(
+                tooltip: '정류장 검색',
+                onPressed: _openStopSearch,
+                icon: const Icon(Icons.search_rounded),
+              ),
+            ]),
+            const SizedBox(height: 5),
+            Text(
+              stopName == null
+                ? '지도의 정류장을 눌러 버스 노선을 확인하세요.'
+                : _selectedMapRoute == null
+                  ? '노선을 선택해 도착정보와 경로를 확인하세요.'
+                  : '선택 노선 · ${_selectedMapRoute?['routeName']}',
+              style: const TextStyle(color: AppColors.secondaryText, fontSize: 12),
             ),
-          const Divider(height: 28),
-          _sectionTitle('곧 도착하는 버스', action: '더보기', onAction: () => setState(() => _selectedIndex = 1)),
-          const SizedBox(height: 12),
-          if (nextBus == null) _emptyBusesCard() else _upcomingBusCard(nextBus),
-          const SizedBox(height: 14),
-          FilledButton.icon(onPressed: _openStopSearch, icon: const Icon(Icons.add_circle_outline), label: const Text('정류장 등록')),
-        ]),
+            if (_restoringSavedBuses) const Padding(
+              padding: EdgeInsets.only(top: 7),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+            if (_savedBusesError != null)
+              TextButton.icon(
+                onPressed: _restoreSavedBuses,
+                icon: const Icon(Icons.refresh),
+                label: Text('$_savedBusesError · 다시 시도'),
+              ),
+            const SizedBox(height: 16),
+            _transitArrivalBanner(visibleBuses),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _openStopSearch,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('정류장 등록'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF007B70),
+                side: const BorderSide(color: Color(0xFF9BCDC8)),
+                minimumSize: const Size.fromHeight(43),
+              ),
+            ),
+          ],
+        ),
       );
       return Stack(children: [
         Positioned.fill(child: StopMapPreview(
-          route: nextBus?.busNum, arrival: nextBus?.remain,
-          onBusTap: nextBus == null ? null : () => _openArrival(nextBus))),
-        // A light veil keeps headings legible while preserving the map.
+          region: _selectedMapRegion,
+          route: nextBus?.busNum,
+          arrival: nextBus?.remain,
+          onBusTap: nextBus == null ? null : () => _openArrival(nextBus),
+          onStopChanged: (stop) {
+            if (!mounted) return;
+            setState(() {
+              _selectedMapStop = stop;
+              _selectedMapRoute = null;
+            });
+          },
+          onRouteChanged: (route) {
+            if (!mounted) return;
+            setState(() => _selectedMapRoute = route);
+          },
+        )),
         Positioned(
-          left: 0, right: 0, top: 0, height: 116,
+          left: 0, right: 0, top: 0, height: 118,
           child: IgnorePointer(child: DecoratedBox(
             decoration: BoxDecoration(gradient: LinearGradient(
-              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
               colors: [
-                const Color(0xFFF3F5F3).withValues(alpha: 0.97),
-                const Color(0xFFF3F5F3).withValues(alpha: 0),
+                const Color(0xFFF8FAFC).withValues(alpha: 0.98),
+                const Color(0xFFF8FAFC).withValues(alpha: 0),
               ],
             )),
           )),
         ),
-        Positioned(top: 22, left: 22, right: 22, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('버스 정류장 지도', style: AppTextStyles.pageTitle),
-          const SizedBox(height: 4),
-          const Text('지도를 움직여 정류장을 찾아보세요.', style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
-          const SizedBox(height: 18),
-          Row(children: [Expanded(child: Material(color: Colors.white, borderRadius: BorderRadius.circular(28), elevation: 2,
-            child: InkWell(borderRadius: BorderRadius.circular(28), onTap: _openStopSearch,
-              child: const Padding(padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                child: Row(children: [Icon(Icons.search, color: AppColors.secondaryText), SizedBox(width: 10),
-                  Expanded(child: Text('정류장이나 버스 번호를 검색하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 13)))]))))),
-            const SizedBox(width: 10), IconButton.filled(tooltip: '지도 안내', onPressed: () => _showMessage('정류장 지도', '지도 위 작은 원형 정류장을 눌러 노선을 확인하세요. 공식 노선 경로가 등록되어 있는 경우에만 컬러 경로가 표시됩니다.'),
-              icon: const Icon(Icons.my_location_rounded))]),
-        ])),
-        if (wide) Positioned(left: 24, bottom: 24, width: 390, child: ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.6), child: SingleChildScrollView(child: panel)))
-        else DraggableScrollableSheet(initialChildSize: 0.42, minChildSize: 0.25, maxChildSize: 0.78,
+        Positioned(
+          left: 18, right: 18, top: 20,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Text('버스 정류장 지도',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.pageTitle.copyWith(fontSize: 21))),
+                const SizedBox(width: 6),
+                Material(
+                  color: Colors.white,
+                  elevation: 2,
+                  borderRadius: BorderRadius.circular(22),
+                  child: InkWell(
+                    onTap: _selectMapDistrict,
+                    borderRadius: BorderRadius.circular(22),
+                    child: SizedBox(
+                      height: 38, width: 145,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(children: [
+                          const Icon(Icons.location_on_rounded,
+                            color: Color(0xFF007F73), size: 17),
+                          const SizedBox(width: 3),
+                          Expanded(child: Text(_selectedMapRegion.label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.ink, fontSize: 11,
+                              fontWeight: FontWeight.w800))),
+                          const Icon(Icons.expand_more_rounded, size: 17),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 3),
+              const Text('지도를 움직여 정류장을 찾아보세요.',
+                style: TextStyle(color: AppColors.secondaryText, fontSize: 13)),
+              const SizedBox(height: 14),
+              Row(children: [
+                Expanded(child: Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  elevation: 3,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(28),
+                    onTap: _openStopSearch,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                      child: Row(children: [
+                        Icon(Icons.search, color: AppColors.secondaryText),
+                        SizedBox(width: 10),
+                        Expanded(child: Text('정류장이나 버스 번호를 검색하세요',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: AppColors.secondaryText,
+                            fontSize: 12))),
+                      ]),
+                    ),
+                  ),
+                )),
+                const SizedBox(width: 9),
+                IconButton.filled(
+                  tooltip: '구·군 지역 선택',
+                  onPressed: _selectMapDistrict,
+                  icon: const Icon(Icons.my_location_rounded),
+                ),
+              ]),
+            ],
+          ),
+        ),
+        DraggableScrollableSheet(
+          initialChildSize: 0.43,
+          minChildSize: 0.26,
+          maxChildSize: 0.82,
           builder: (context, controller) => Container(
-            decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
-            child: SingleChildScrollView(controller: controller, child: panel))),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            ),
+            child: SingleChildScrollView(controller: controller, child: panel),
+          ),
+        ),
       ]);
     });
+  }
+
+  Widget _transitArrivalBanner(List<BusArrivalInfo> buses) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF006E64), Color(0xFF159C92), Color(0xFF48BEAB)],
+          begin: Alignment.centerLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.directions_bus_rounded,
+                color: Colors.white, size: 27),
+            ),
+            const SizedBox(width: 11),
+            const Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('곧 도착하는 버스',
+                  style: TextStyle(color: Colors.white,
+                    fontSize: 18, fontWeight: FontWeight.w900)),
+                Text('등록한 노선의 도착정보',
+                  style: TextStyle(color: Color(0xFFD8F7F0), fontSize: 11)),
+              ],
+            )),
+            Icon(Icons.location_city_rounded,
+              size: 41, color: Colors.white.withValues(alpha: 0.33)),
+          ]),
+          const SizedBox(height: 12),
+          if (buses.isEmpty)
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(13),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 13, vertical: 13),
+                child: Row(children: [
+                  const Icon(Icons.bus_alert_outlined,
+                    size: 24, color: Color(0xFF00877D)),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text(
+                    '등록된 버스가 없어요. 정류장을 등록해주세요.',
+                    style: const TextStyle(fontSize: 12,
+                      color: AppColors.ink, fontWeight: FontWeight.w600),
+                  )),
+                ]),
+              ),
+            )
+          else
+            Row(children: [
+              for (var i = 0; i < buses.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(child: _arrivalBannerTile(buses[i])),
+              ],
+            ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _arrivalBannerTile(BusArrivalInfo bus) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
+        onTap: () => _openArrival(bus),
+        borderRadius: BorderRadius.circular(13),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.directions_bus_rounded,
+                  size: 17, color: Color(0xFF00877D)),
+                const SizedBox(width: 5),
+                Expanded(child: Text(bus.busNum,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.ink,
+                    fontWeight: FontWeight.w800, fontSize: 13))),
+                const Icon(Icons.chevron_right_rounded,
+                  size: 17, color: Color(0xFF64748B)),
+              ]),
+              const SizedBox(height: 7),
+              Text(
+                bus.remain.contains('분') && !bus.remain.contains('없음')
+                    ? '${bus.remain} 후 도착'
+                    : bus.remain,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF008B6E),
+                  fontSize: 15, fontWeight: FontWeight.w900),
+              ),
+              Text(bus.station,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.secondaryText,
+                  fontSize: 10)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _upcomingBusCard(BusArrivalInfo bus) {
