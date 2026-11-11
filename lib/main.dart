@@ -22,6 +22,29 @@ class BusAlarmApp extends StatelessWidget {
     return MaterialApp(
       title: '버스 타이머',
       debugShowCheckedModeBanner: false,
+      // Web and tablet intentionally use the same portrait mobile design.
+      // The Navigator is constrained too, so routes, sheets and dialogs do not
+      // escape into a separate wide/desktop layout.
+      builder: (context, child) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth > 430.0
+              ? 430.0 : constraints.maxWidth;
+          return ColoredBox(
+            color: const Color(0xFFE9EEF3),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 430),
+                child: MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    size: Size(width, constraints.maxHeight),
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: colorScheme,
