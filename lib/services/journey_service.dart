@@ -3,9 +3,19 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class JourneyService {
+  // Production API is hosted under the shared BlueWaikiki API domain.
+  // PUBLIC_API_URL is supplied by the web build system for another purpose
+  // and must not override this endpoint (its /bustimer path is outdated).
+  static const String productionBaseUrl =
+      'https://api.bluewaikiki.top/busstop_timer';
+  static const List<String> _formerBaseUrls = [
+    'https://bustimer.bluewaikiki.top',
+    'https://api.bluewaikiki.top/bustimer',
+  ];
+
   JourneyService({required this.token, String? baseUrl})
       : baseUrl = (baseUrl ?? const String.fromEnvironment('BUS_API_URL',
-          defaultValue: 'https://bustimer.bluewaikiki.top')).replaceFirst(RegExp(r'/+$'), '');
+          defaultValue: productionBaseUrl)).replaceFirst(RegExp(r'/+$'), '');
   static final Map<String, Future<String>> _sessions = {};
   final String token;
   final String baseUrl;
@@ -16,6 +26,18 @@ class JourneyService {
     final key = 'bus_timer_guest:${api.baseUrl}';
     final saved = prefs.getString(key);
     if (saved != null && saved.isNotEmpty) return saved;
+    // Carry forward the existing guest identity if the web origin is unchanged.
+    // connect() checks auth/status and falls back to a new guest only on 401.
+    if (api.baseUrl == productionBaseUrl) {
+      for (final formerBase in _formerBaseUrls) {
+        final formerToken = prefs.getString('bus_timer_guest:$formerBase');
+        if (formerToken == null || formerToken.isEmpty) continue;
+        if (!await prefs.setString(key, formerToken)) {
+          throw Exception('이전 로그인 정보를 옮기지 못했습니다.');
+        }
+        return formerToken;
+      }
+    }
     final data = await api.request('auth/guest', body: {});
     final token = data['token'] as String;
     if (!await prefs.setString(key, token)) throw Exception('연결 정보를 저장하지 못했습니다.');
@@ -46,6 +68,13 @@ class JourneyService {
     _sessions.remove(base);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('bus_timer_guest:$base');
+    // Prevent stale aliases from silently signing the user in again after a
+    // deliberate logout or when a previously migrated token has expired.
+    if (base == productionBaseUrl) {
+      for (final formerBase in _formerBaseUrls) {
+        await prefs.remove('bus_timer_guest:$formerBase');
+      }
+    }
   }
 
   Future<void> verifyEmail(String email, String code, String challengeId) async {

@@ -6,6 +6,7 @@ import 'app_styles.dart';
 import 'bus_data_service.dart';
 import 'journey_home_page.dart';
 import 'live_bus_page.dart';
+import 'services/journey_service.dart';
 import 'widgets/stop_map_preview.dart';
 
 class BusHomePage extends ConsumerStatefulWidget {
@@ -23,6 +24,79 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   bool _locationPreview = false;
   bool _favoritesOnly = false;
   final Set<String> _favorites = {};
+  bool _restoringSavedBuses = false;
+  String? _savedBusesError;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSavedBuses();
+  }
+
+  Future<void> _restoreSavedBuses() async {
+    if (_restoringSavedBuses) return;
+    setState(() {
+      _restoringSavedBuses = true;
+      _savedBusesError = null;
+    });
+    JourneyService? api;
+    try {
+      api = await JourneyService.connect();
+      final response = await api.request('bus/subscriptions');
+      final subscriptions = (response['subscriptions'] as List<dynamic>? ?? [])
+          .map((row) => Map<String, dynamic>.from(row as Map)).toList();
+      final buses = [
+        for (final sub in subscriptions)
+          BusArrivalInfo(
+            recordId: '${sub['id']}',
+            station: '${sub['stopName']}',
+            busNum: '${sub['routeName']}',
+            remain: '도착정보 없음',
+          ),
+      ];
+      if (!mounted) return;
+      // Show already registered stops immediately; ETA may load later.
+      ref.read(busListProvider.notifier).replaceBuses(buses);
+
+      for (final stopId in subscriptions.map((row) => '${row['stopId']}').toSet()) {
+        try {
+          final arrivals = await api.request(
+            'bus/arrivals?${Uri(queryParameters: {'stopId': stopId}).query}',
+          );
+          final live = (arrivals['arrivals'] as List<dynamic>? ?? [])
+              .map((row) => Map<String, dynamic>.from(row as Map)).toList();
+          for (var i = 0; i < subscriptions.length; i++) {
+            final sub = subscriptions[i];
+            if ('${sub['stopId']}' != stopId) continue;
+            final matching = live.where(
+              (row) => '${row['routeId']}' == '${sub['routeId']}',
+            ).toList();
+            String eta(Map<String, dynamic> item) =>
+                item['etaMinutes'] == null ? '도착정보 없음'
+                : '${item['etaMinutes']}분'
+                  '${item['basis'] == 'historical_estimate' ? ' (이력 추정)' : ''}';
+            buses[i] = BusArrivalInfo(
+              recordId: '${sub['id']}',
+              station: '${sub['stopName']}',
+              busNum: '${sub['routeName']}',
+              remain: matching.isEmpty ? '도착정보 없음' : eta(matching.first),
+              nextBus: matching.length > 1 ? eta(matching[1]) : null,
+            );
+          }
+        } catch (_) {
+          // A temporary ETA error must not remove an existing subscription.
+        }
+      }
+      if (mounted) ref.read(busListProvider.notifier).replaceBuses(buses);
+    } catch (_) {
+      if (mounted) setState(() {
+        _savedBusesError = '저장된 버스 정보를 불러오지 못했어요.';
+      });
+    } finally {
+      api?.dispose();
+      if (mounted) setState(() => _restoringSavedBuses = false);
+    }
+  }
 
   static const _destinations = [
     _Destination('홈', Icons.home_rounded),
@@ -125,6 +199,13 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           Row(children: [Expanded(child: Text(nextBus?.station ?? '정류장을 등록해주세요', style: AppTextStyles.pageTitle.copyWith(fontSize: 23))),
             IconButton(tooltip: '정류장 찾기', onPressed: _openStopSearch, icon: const Icon(Icons.expand_more_rounded))]),
           const Text('지도의 정류장을 눌러 버스 노선을 확인하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+          if (_restoringSavedBuses) const LinearProgressIndicator(),
+          if (_savedBusesError != null)
+            TextButton.icon(
+              onPressed: _restoreSavedBuses,
+              icon: const Icon(Icons.refresh),
+              label: Text('$_savedBusesError · 다시 시도'),
+            ),
           const Divider(height: 28),
           _sectionTitle('곧 도착하는 버스', action: '더보기', onAction: () => setState(() => _selectedIndex = 1)),
           const SizedBox(height: 12),
@@ -726,10 +807,11 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
     );
   }
 
-  void _openStopSearch() {
-    Navigator.of(context).push(
+  Future<void> _openStopSearch() async {
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const LiveBusPage()),
     );
+    if (mounted) await _restoreSavedBuses();
   }
 
   void _openArrival(BusArrivalInfo bus) {

@@ -141,3 +141,16 @@ WGS84 위도·경도를 받아 사각 범위 내 정류장을 조회한다.
 배포 전에 `flutter pub get`으로 의존성 잠금을 갱신하고 Flutter Web을 빌드해야 한다. 서버는 시작 시 미적용 SQL 마이그레이션을 자동 적용한다. Android 네이티브 빌드에는 MapLibre 플러그인이 요구하는 JDK 21 환경도 확인한다.
 
 **주의**: 이 브랜치에서는 테스트 코드 추가 및 테스트 실행을 진행하지 않았다. 디자인 참고 이미지와 실제 국내 정류장 데이터의 정확도는 별도 수동 검수가 필요하다.
+
+## 8. 운영 API 도메인 · 기존 정류장 복원 (2026-11-11)
+
+현재 대시보드의 `버스타이머` 서버 설정: `BASE_PATH=/busstop_timer`, `ALLOWED_ORIGINS=https://app.bluewaikiki.top`.
+
+- **운영 API 기본 주소:** `https://api.bluewaikiki.top/busstop_timer`. Flutter에서는 `.../api/auth/guest`, `.../api/bus/map/stops` 등으로 호출한다.
+- **폐기된 API 기본 주소:** `https://bustimer.bluewaikiki.top`.
+- 웹 빌드 로그에 보이는 `PUBLIC_API_URL=https://api.bluewaikiki.top/bustimer`는 이 Flutter 클라이언트에서 읽지 않는 오래된 빌드 정의다. 실제 API는 `BUS_API_URL` 빌드 정의가 제공되면 그것을 사용하고, 없으면 위 운영 API 주소를 사용한다. 별도 UI 배포 설정도 운영 API로 맞춰야 한다.
+- 같은 브라우저 출처(origin)에서 주소만 바뀌었을 경우 기존 `SharedPreferences` 게스트 토큰을 새 주소 키로 옮기고, 서버의 `auth/status`로 유효성 확인 후 재사용한다. 401 인증 만료일 때만 새 익명 세션으로 재발급한다.
+- 브라우저 **출처 자체가 변경된 경우**에는 다른 사이트의 로컬 저장소를 읽을 수 없으므로 토큰을 자동 이관할 수 없다. 서버의 저장 데이터는 그대로 남으며 이메일 계정 연결 등 별도의 복구 경로가 필요하다.
+- 홈 화면 진입 시 서버의 `bus/subscriptions`를 자동 조회해 기존 정류장/버스를 즉시 복원한다. ETA 요청에 실패해도 등록 내역을 숨기지 않는다. 정류장 검색 화면에서 돌아올 때 목록을 다시 동기화한다.
+- **배포 순서:** 새 API 기본 주소가 들어간 웹 빌드를 배포하고, `/api/bus/map/stops` 및 `/api/bus/map/route`가 404라면 이전 코드로 배포된 Function을 최신 main으로 갱신한다. DB 마이그레이션은 서버 기동 시 자동 적용된다.
+- 현재 코드 수정은 데이터베이스의 계정·정류장·노선 기록을 삭제하지 않는다.
