@@ -2,7 +2,7 @@
 
 ## 범위와 배포 주소
 
-직장인·학생의 반복 이동을 위해 정류장 기반 직행·최대 2회 환승 경로와 구간별 버스를 비교·선택한다. 배포 주소는 `https://bustimer.bluewaikiki.top/`, API는 같은 도메인의 `/api/`다. 가계부는 `https://ledger.bluewaikiki.top/`의 별도 서비스다.
+직장인·학생의 반복 이동을 위해 정류장 기반 직행·최대 2회 환승 경로와 구간별 버스를 비교·선택한다. 현재 플랫폼 배포 주소는 `https://app.bluewaikiki.top/bustimer/`, API는 `https://api.bluewaikiki.top/bustimer/api/`다. 대시보드 프로젝트 slug와 서버 런타임 `BASE_PATH`는 모두 `/bustimer`를 사용한다. 가계부는 `https://ledger.bluewaikiki.top/`의 별도 서비스다.
 
 실행 구성: 공통 Docker Caddy → 버스 전용 Node.js 24 API → 버스 전용 PostgreSQL 16. API·DB는 버스 Compose 프로젝트로 관리하며 PostgreSQL은 내부 DB 네트워크와 전용 볼륨을 사용한다. Flutter Web 산출물은 같은 서버가 `/`에서 제공한다. 모바일도 동일 API에 접속한다. Cloudflare Worker·D1은 이전 구성으로 분리한다.
 

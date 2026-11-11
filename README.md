@@ -29,9 +29,9 @@ a·b·c·d·e 각각의 도착 시각과 이후 차량을 고려합니다. 첫 �
 
 ## 배포 및 설계
 
-- 웹: https://bustimer.bluewaikiki.top/
+- 웹: https://app.bluewaikiki.top/bustimer/
 - Ubuntu 앱 서버 + 프로젝트 전용 PostgreSQL: [설치·운영 안내](server/README.md)
-- 현재 운영 API 기본 주소: `https://api.bluewaikiki.top/busstop_timer` (앱 내 `BUS_API_URL`로 별도 지정 가능). 이전 `bustimer.bluewaikiki.top` API 주소는 사용하지 않음.
+- 현재 운영 API 기본 주소: `https://api.bluewaikiki.top/bustimer` (앱 내 `BUS_API_URL`로 별도 지정 가능). 대시보드의 프로젝트 slug와 서버 `BASE_PATH`는 모두 `bustimer`로 통일.
 - [상세설계](docs/DETAILED_DESIGN.md) · [DB 구조](docs/DATABASE_DESIGN.md)
 
 ## 기획 및 디자인

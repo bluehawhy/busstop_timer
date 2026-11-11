@@ -144,13 +144,25 @@ WGS84 위도·경도를 받아 사각 범위 내 정류장을 조회한다.
 
 ## 8. 운영 API 도메인 · 기존 정류장 복원 (2026-11-11)
 
-현재 대시보드의 `버스타이머` 서버 설정: `BASE_PATH=/busstop_timer`, `ALLOWED_ORIGINS=https://app.bluewaikiki.top`.
+대시보드에 등록된 프로젝트 slug는 **`bustimer`**다. 플랫폼 라우터는 slug 기준으로 외부 API 주소를 `https://api.bluewaikiki.top/bustimer`에 공개하며 경로를 삭제하지 않고 Function에 전달한다. 서버의 `BASE_PATH`도 **`/bustimer`**여야 한다.
 
-- **운영 API 기본 주소:** `https://api.bluewaikiki.top/busstop_timer`. Flutter에서는 `.../api/auth/guest`, `.../api/bus/map/stops` 등으로 호출한다.
-- **폐기된 API 기본 주소:** `https://bustimer.bluewaikiki.top`.
-- 웹 빌드 로그에 보이는 `PUBLIC_API_URL=https://api.bluewaikiki.top/bustimer`는 이 Flutter 클라이언트에서 읽지 않는 오래된 빌드 정의다. 실제 API는 `BUS_API_URL` 빌드 정의가 제공되면 그것을 사용하고, 없으면 위 운영 API 주소를 사용한다. 별도 UI 배포 설정도 운영 API로 맞춰야 한다.
-- 같은 브라우저 출처(origin)에서 주소만 바뀌었을 경우 기존 `SharedPreferences` 게스트 토큰을 새 주소 키로 옮기고, 서버의 `auth/status`로 유효성 확인 후 재사용한다. 401 인증 만료일 때만 새 익명 세션으로 재발급한다.
-- 브라우저 **출처 자체가 변경된 경우**에는 다른 사이트의 로컬 저장소를 읽을 수 없으므로 토큰을 자동 이관할 수 없다. 서버의 저장 데이터는 그대로 남으며 이메일 계정 연결 등 별도의 복구 경로가 필요하다.
-- 홈 화면 진입 시 서버의 `bus/subscriptions`를 자동 조회해 기존 정류장/버스를 즉시 복원한다. ETA 요청에 실패해도 등록 내역을 숨기지 않는다. 정류장 검색 화면에서 돌아올 때 목록을 다시 동기화한다.
-- **배포 순서:** 새 API 기본 주소가 들어간 웹 빌드를 배포하고, `/api/bus/map/stops` 및 `/api/bus/map/route`가 404라면 이전 코드로 배포된 Function을 최신 main으로 갱신한다. DB 마이그레이션은 서버 기동 시 자동 적용된다.
-- 현재 코드 수정은 데이터베이스의 계정·정류장·노선 기록을 삭제하지 않는다.
+| 항목 | 적용해야 하는 운영값 |
+|---|---|
+| 대시보드 프로젝트 slug | `bustimer` (변경하지 않음) |
+| 웹 주소 | `https://app.bluewaikiki.top/bustimer/` |
+| 공개 API 기본 주소 | `https://api.bluewaikiki.top/bustimer` |
+| 서버 런타임 `BASE_PATH` | `/bustimer` |
+| 서버 런타임 `ALLOWED_ORIGINS` | `https://app.bluewaikiki.top` |
+| 서버 런타임 `AUTH_EMAIL_LINK_URL` | `https://api.bluewaikiki.top/bustimer/api/auth/verify` |
+
+**이전 잘못된 경로:** `https://api.bluewaikiki.top/busstop_timer`는 프로젝트 slug와 불일치해 플랫폼 라우터에서 Function을 찾을 수 없다. 별도 독립 호스트인 `https://bustimer.bluewaikiki.top`는 이전 배포 구성이므로 운영 앱의 기본 경로로 사용하지 않는다.
+
+- `JourneyService`와 경로 검색 화면은 같은 `BUS_API_URL` 기본값을 사용한다. 앱 빌드에 `BUS_API_URL`이 제공되면 이를 우선 사용하며, 제공되지 않으면 `https://api.bluewaikiki.top/bustimer`를 사용한다.
+- 대시보드 웹 빌드가 주입하는 `PUBLIC_API_URL`은 현재 Flutter `JourneyService`에서 직접 읽지 않는다. 프로젝트 slug 기반의 공개 URL이 정확하더라도 `BUS_API_URL`이 잘못 지정되면 앱이 엉뚱한 서버로 연결될 수 있다.
+- 기존 브라우저 출처가 유지되면 `SharedPreferences`의 이전 경로별 게스트 토큰을 새 API 저장 키로 이전할 수 있다. `auth/status`에서 401로 거절되어도 오래된 키를 자동 삭제하지 않고, 현재 API에서 새 게스트 토큰을 발급한다. 명시적 로그아웃 시에는 이전 키도 삭제한다.
+- 브라우저 출처 자체가 바뀌면 브라우저 보안 정책 때문에 옛 출처의 저장소를 자동 조회할 수 없다. 이메일로 연결한 계정은 다시 인증해 복구할 수 있지만 연결하지 않은 게스트 계정은 별도 복구 방안이 필요하다.
+- 홈 화면은 서버의 `bus/subscriptions`를 자동 조회해 기존 등록 정류장과 버스를 복원한다. 일시적인 도착정보 오류로 등록 내역을 지우지 않는다.
+- **서버 런타임 변수**는 Git에 저장되지 않으므로 코드 PR만 머지해도 `BASE_PATH`가 바뀌지 않는다. 대시보드의 환경변수에 `BASE_PATH=/bustimer`와 정확한 인증 링크를 저장하고 런타임에 적용해야 한다. 이 설정을 바꾸기 전까지 기존 Function은 새 경로에서 정상 동작하지 않을 수 있다.
+- **배포 순서:** 수정된 Flutter 웹을 빌드할 준비 → 서버 런타임 경로 수정·적용 → 공개 `/bustimer/api/` 응답 확인 → 수정된 웹 빌드 배포 → 게스트 인증 및 기존 구독 복원 확인. 서버 재시작 순간의 짧은 연결 중단 가능성을 고려한다. DB 삭제나 계정 초기화는 필요하지 않다.
+
+별도 수동 Compose 배포용 `server/deploy/deploy.sh`, `server/.env.example` 및 `server/README.md`는 현재 플랫폼 운영과 구별해야 한다. 플랫폼 런타임 변수 예시는 `server/deploy/platform-runtime.env.example`을 참고한다.

@@ -3,14 +3,14 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class JourneyService {
-  // Production API is hosted under the shared BlueWaikiki API domain.
-  // PUBLIC_API_URL is supplied by the web build system for another purpose
-  // and must not override this endpoint (its /bustimer path is outdated).
+  // The dashboard publishes the Function under the *project slug* (bustimer).
+  // BUS_API_URL may override this for development; PUBLIC_API_URL is not read.
   static const String productionBaseUrl =
-      'https://api.bluewaikiki.top/busstop_timer';
+      'https://api.bluewaikiki.top/bustimer';
+  // Never discard older guest tokens just because the API host/path changed.
   static const List<String> _formerBaseUrls = [
+    'https://api.bluewaikiki.top/busstop_timer',
     'https://bustimer.bluewaikiki.top',
-    'https://api.bluewaikiki.top/bustimer',
   ];
 
   JourneyService({required this.token, String? baseUrl})
@@ -21,14 +21,14 @@ class JourneyService {
   final String baseUrl;
   final http.Client _client = http.Client();
 
-  static Future<String> _load(JourneyService api) async {
+  static Future<String> _load(JourneyService api, {bool tryLegacy = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final key = 'bus_timer_guest:${api.baseUrl}';
     final saved = prefs.getString(key);
     if (saved != null && saved.isNotEmpty) return saved;
     // Carry forward the existing guest identity if the web origin is unchanged.
     // connect() checks auth/status and falls back to a new guest only on 401.
-    if (api.baseUrl == productionBaseUrl) {
+    if (tryLegacy && api.baseUrl == productionBaseUrl) {
       for (final formerBase in _formerBaseUrls) {
         final formerToken = prefs.getString('bus_timer_guest:$formerBase');
         if (formerToken == null || formerToken.isEmpty) continue;
@@ -55,8 +55,11 @@ class JourneyService {
       on BusApiException catch (error) {
         if (error.status != 401) rethrow;
         api.dispose();
-        await _forget(base);
-        final fresh = await (_sessions[base] ??= _load(bootstrap));
+        // Keep aliases so a rejected migrated token never erases recoverable
+        // credentials. Do not retry the same rejected alias a second time.
+        await _forget(base, removeLegacy: false);
+        final fresh = await (_sessions[base] ??=
+            _load(bootstrap, tryLegacy: false));
         api = JourneyService(token: fresh, baseUrl: base);
       }
       return api;
@@ -64,13 +67,13 @@ class JourneyService {
     finally { bootstrap.dispose(); }
   }
 
-  static Future<void> _forget(String base) async {
+  static Future<void> _forget(String base, {bool removeLegacy = true}) async {
     _sessions.remove(base);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('bus_timer_guest:$base');
     // Prevent stale aliases from silently signing the user in again after a
     // deliberate logout or when a previously migrated token has expired.
-    if (base == productionBaseUrl) {
+    if (removeLegacy && base == productionBaseUrl) {
       for (final formerBase in _formerBaseUrls) {
         await prefs.remove('bus_timer_guest:$formerBase');
       }
