@@ -5,41 +5,50 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../app_styles.dart';
 import '../bus_data_service.dart';
 import '../services/journey_service.dart';
+import 'busan_map_regions.dart';
+import 'bus_stop_marker.dart';
 
 /// Real OSM vector map and stop catalog. Vehicle icons and route polylines are
 /// deliberately omitted unless authoritative coordinates are available.
 class StopMapPreview extends ConsumerStatefulWidget {
-  const StopMapPreview({super.key, this.route, this.arrival, this.onBusTap});
+  const StopMapPreview({
+    super.key,
+    required this.region,
+    this.route,
+    this.arrival,
+    this.onBusTap,
+    this.onStopChanged,
+    this.onRouteChanged,
+    this.onArrivalsChanged,
+  });
 
+  final BusanMapRegion region;
   final String? route;
   final String? arrival;
   final VoidCallback? onBusTap;
+  final ValueChanged<Map<String, dynamic>?>? onStopChanged;
+  final ValueChanged<Map<String, dynamic>?>? onRouteChanged;
+  final ValueChanged<List<Map<String, dynamic>>>? onArrivalsChanged;
 
   @override
   ConsumerState<StopMapPreview> createState() => _StopMapPreviewState();
 }
 
 class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
-  static const _busan = LatLng(35.1796, 129.0756);
-  // Compact, outlined transit stops stay legible without dominating the map.
-  static const _stopFill = '#F9FDFB';
-  static const _stopOutline = '#438985';
-  static const _selectedStopFill = '#F36A2B';
-  static const _routePalette = [
-    '#F36A2B', '#EA1658', '#7BC65B', '#F5AE16', '#009CA5',
-  ];
+  static const _normalIcon = 'bus-stop-teal';
+  static const _selectedIcon = 'bus-stop-orange';
+  static const _routeBlue = '#246BFA';
 
   MapLibreMapController? _map;
   JourneyService? _api;
   bool _ready = false, _loading = false, _pending = false, _zoomRequired = false;
   bool _truncated = false, _saving = false;
-  double _stopRadius = 4.2;
+
   String? _error, _routeNotice;
   Map<String, dynamic>? _selectedStop, _selectedRoute;
   List<Map<String, dynamic>> _routes = [];
-  final Map<String, Map<String, dynamic>> _stopsByCircle = {};
   final Map<String, Map<String, dynamic>> _stopsBySymbol = {};
-  final Map<String, Circle> _circleByStop = {};
+  final Map<String, Symbol> _stopSymbols = {};
 
   @override
   void dispose() {
@@ -59,24 +68,46 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
     return opened;
   }
 
-  String _routeColor(String id) {
-    var hash = 0;
-    for (final unit in id.codeUnits) {
-      hash = (hash * 31 + unit) & 0x7fffffff;
-    }
-    return _routePalette[hash % _routePalette.length];
+  @override
+  void didUpdateWidget(covariant StopMapPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.region.district == widget.region.district) return;
+    _selectedStop = null;
+    _selectedRoute = null;
+    _routes = [];
+    _routeNotice = null;
+    _map?.clearLines();
+    _map?.animateCamera(
+      CameraUpdate.newLatLngZoom(widget.region.center, 14),
+    );
   }
 
   void _onMapCreated(MapLibreMapController map) {
     _map = map;
-    map.onCircleTapped.add((circle) {
-      final stop = _stopsByCircle[circle.id];
-      if (stop != null) _selectStop(stop);
-    });
     map.onSymbolTapped.add((symbol) {
       final stop = _stopsBySymbol[symbol.id];
       if (stop != null) _selectStop(stop);
     });
+  }
+
+  Future<void> _onStyleReady() async {
+    final controller = _map;
+    if (controller == null) return;
+    try {
+      await controller.addImage(
+        _normalIcon, await createBusStopMarker(selected: false),
+      );
+      await controller.addImage(
+        _selectedIcon, await createBusStopMarker(selected: true),
+      );
+      if (!mounted || !identical(_map, controller)) return;
+      _ready = true;
+      await _refreshVisibleStops();
+    } catch (_) {
+      if (mounted) setState(
+        () => _error = '지도 정류장 아이콘을 불러오지 못했어요.',
+      );
+    }
   }
 
   Future<void> _refreshVisibleStops() async {
@@ -96,11 +127,9 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
       // At a city-wide scale the catalog would overwhelm the mobile map.
       if (north - south > 0.4 || east - west > 0.4 ||
           south >= north || west >= east) {
-        await controller.clearCircles();
         await controller.clearSymbols();
         _stopsBySymbol.clear();
-        _stopsByCircle.clear();
-        _circleByStop.clear();
+        _stopSymbols.clear();
         if (mounted) setState(() {
           _zoomRequired = true;
           _truncated = false;
@@ -121,35 +150,25 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
           .map((item) => Map<String, dynamic>.from(item as Map))
           .where((stop) => stop['latitude'] is num && stop['longitude'] is num)
           .toList();
-      await controller.clearCircles();
       await controller.clearSymbols();
       _stopsBySymbol.clear();
-      _stopsByCircle.clear();
-      _circleByStop.clear();
-      // A quiet metro-atlas symbol: off-white center, muted teal edge.
-      // At a wider extent the dot becomes smaller rather than obscuring roads.
-      _stopRadius = north - south > 0.05 ? 3.2
-          : north - south > 0.018 ? 4.2 : 5.1;
-      final circles = await controller.addCircles([
+      _stopSymbols.clear();
+      // Bus-front pictograms from concept 4, with collision-safe symbols.
+      final markers = await controller.addSymbols([
         for (final stop in stops)
-          CircleOptions(
+          SymbolOptions(
             geometry: LatLng(
               (stop['latitude'] as num).toDouble(),
               (stop['longitude'] as num).toDouble(),
             ),
-            circleColor: stop['id'] == _selectedStop?['id']
-                ? _selectedStopFill : _stopFill,
-            circleRadius: stop['id'] == _selectedStop?['id']
-                ? 8.5 : _stopRadius,
-            circleStrokeColor: stop['id'] == _selectedStop?['id']
-                ? '#FFFFFF' : _stopOutline,
-            circleStrokeWidth: stop['id'] == _selectedStop?['id']
-                ? 3 : 1.7,
+            iconImage: stop['id'] == _selectedStop?['id']
+                ? _selectedIcon : _normalIcon,
+            iconSize: stop['id'] == _selectedStop?['id'] ? 0.60 : 0.43,
           ),
       ]);
-      for (var i = 0; i < circles.length; i++) {
-        _stopsByCircle[circles[i].id] = stops[i];
-        _circleByStop['${stops[i]['id']}'] = circles[i];
+      for (var i = 0; i < markers.length; i++) {
+        _stopsBySymbol[markers[i].id] = stops[i];
+        _stopSymbols['${stops[i]['id']}'] = markers[i];
       }
       // Only label nearby stops at close zoom; dense numbers must not
       // compete with the map title or the selected route.
@@ -193,23 +212,16 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
 
   Future<void> _selectStop(Map<String, dynamic> stop) async {
     final controller = _map;
-    final previousId = _selectedStop?['id']?.toString();
-    final previous = _circleByStop[previousId];
+    final previous = _stopSymbols['${_selectedStop?['id']}'];
     if (previous != null && controller != null) {
-      await controller.updateCircle(previous, CircleOptions(
-        circleColor: _stopFill,
-        circleRadius: _stopRadius,
-        circleStrokeColor: _stopOutline,
-        circleStrokeWidth: 1.7,
+      await controller.updateSymbol(previous, const SymbolOptions(
+        iconImage: _normalIcon, iconSize: 0.43,
       ));
     }
-    final selected = _circleByStop['${stop['id']}'];
+    final selected = _stopSymbols['${stop['id']}'];
     if (selected != null && controller != null) {
-      await controller.updateCircle(selected, const CircleOptions(
-        circleColor: _selectedStopFill,
-        circleRadius: 8.5,
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 3,
+      await controller.updateSymbol(selected, const SymbolOptions(
+        iconImage: _selectedIcon, iconSize: 0.60,
       ));
     }
     if (!mounted) return;
@@ -219,6 +231,9 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
       _routes = [];
       _routeNotice = '정류장 노선을 조회하고 있어요.';
     });
+    widget.onStopChanged?.call(stop);
+    widget.onRouteChanged?.call(null);
+    widget.onArrivalsChanged?.call(const []);
     await controller?.clearLines();
     try {
       final api = await _service();
@@ -237,6 +252,19 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
         setState(() => _routeNotice = '노선을 불러오지 못했습니다. 다시 시도해주세요.');
       }
     }
+    // Arrivals come from the provider. No example or guessed ETA is displayed.
+    try {
+      final api = await _service();
+      final live = await api.request('bus/arrivals?${Uri(queryParameters: {
+        'stopId': '${stop['id']}',
+      }).query}');
+      if (!mounted || _selectedStop?['id'] != stop['id']) return;
+      final arrivals = (live['arrivals'] as List<dynamic>? ?? [])
+          .map((row) => Map<String, dynamic>.from(row as Map)).toList();
+      widget.onArrivalsChanged?.call(arrivals);
+    } catch (_) {
+      // A provider failure must not hide a stop or its known routes.
+    }
   }
 
   Future<void> _selectRoute(Map<String, dynamic> route) async {
@@ -246,6 +274,7 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
       _selectedRoute = route;
       _routeNotice = '확인된 노선 경로를 조회하고 있어요.';
     });
+    widget.onRouteChanged?.call(route);
     final controller = _map;
     await controller?.clearLines();
     try {
@@ -280,7 +309,7 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
       ));
       await controller?.addLine(LineOptions(
         geometry: points,
-        lineColor: _routeColor(id),
+        lineColor: _routeBlue,
         lineWidth: 6,
         lineOpacity: 0.96,
       ));
@@ -321,6 +350,9 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
 
   void _closeStop() {
     _map?.clearLines();
+    widget.onStopChanged?.call(null);
+    widget.onRouteChanged?.call(null);
+    widget.onArrivalsChanged?.call(const []);
     setState(() {
       _selectedStop = null;
       _selectedRoute = null;
@@ -334,13 +366,10 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
   Widget build(BuildContext context) {
     return Stack(children: [
       Positioned.fill(child: MapLibreMap(
-        initialCameraPosition: const CameraPosition(target: _busan, zoom: 14),
+        initialCameraPosition: CameraPosition(target: widget.region.center, zoom: 14),
         styleString: 'assets/map/bus_transit_style.json',
         onMapCreated: _onMapCreated,
-        onStyleLoadedCallback: () {
-          _ready = true;
-          _refreshVisibleStops();
-        },
+        onStyleLoadedCallback: _onStyleReady,
         onCameraIdle: () { _refreshVisibleStops(); },
         rotateGesturesEnabled: false,
         tiltGesturesEnabled: false,
@@ -400,7 +429,7 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
                       onSelected: (_) => _selectRoute(route),
                       avatar: CircleAvatar(radius: 5,
                         backgroundColor: Color(int.parse(
-                          _routeColor('${route['routeId']}').substring(1), radix: 16) | 0xFF000000)),
+                          _routeBlue.substring(1), radix: 16) | 0xFF000000)),
                     ),
                 ]),
                 if (_routeNotice != null) Padding(
