@@ -34,86 +34,19 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   @override
   Widget build(BuildContext context) {
     final buses = ref.watch(busListProvider);
-    final width = MediaQuery.sizeOf(context).width;
-    final wide = width >= 900;
-
+    // A single mobile navigation system is used at every viewport width.
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: wide
-            ? Row(
-                children: [
-                  _desktopNavigation(),
-                  const VerticalDivider(width: 1, color: AppColors.border),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1180),
-                        child: _pageForIndex(buses),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : _pageForIndex(buses),
+      body: SafeArea(child: _pageForIndex(buses)),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) =>
+            setState(() => _selectedIndex = index),
+        destinations: _destinations.map((item) => NavigationDestination(
+          icon: Icon(item.icon),
+          label: item.label,
+        )).toList(),
       ),
-      bottomNavigationBar: wide
-          ? null
-          : NavigationBar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) =>
-                  setState(() => _selectedIndex = index),
-              destinations: _destinations
-                  .map(
-                    (item) => NavigationDestination(
-                      icon: Icon(item.icon),
-                      label: item.label,
-                    ),
-                  )
-                  .toList(),
-            ),
-    );
-  }
-
-  Widget _desktopNavigation() {
-    return NavigationRail(
-      selectedIndex: _selectedIndex,
-      onDestinationSelected: (index) =>
-          setState(() => _selectedIndex = index),
-      labelType: NavigationRailLabelType.all,
-      backgroundColor: AppColors.surface,
-      selectedIconTheme: const IconThemeData(color: AppColors.primary),
-      selectedLabelTextStyle: const TextStyle(
-        color: AppColors.primary,
-        fontWeight: FontWeight.w800,
-      ),
-      unselectedLabelTextStyle: const TextStyle(
-        color: AppColors.secondaryText,
-      ),
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Icon(
-            Icons.directions_bus_rounded,
-            color: AppColors.accent,
-          ),
-        ),
-      ),
-      destinations: _destinations
-          .map(
-            (item) => NavigationRailDestination(
-              icon: Icon(item.icon),
-              label: Text(item.label),
-            ),
-          )
-          .toList(),
     );
   }
 
@@ -191,7 +124,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           const SizedBox(height: 8),
           Row(children: [Expanded(child: Text(nextBus?.station ?? '정류장을 등록해주세요', style: AppTextStyles.pageTitle.copyWith(fontSize: 23))),
             IconButton(tooltip: '정류장 찾기', onPressed: _openStopSearch, icon: const Icon(Icons.expand_more_rounded))]),
-          const Text('지도·도착정보 미리보기', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
+          const Text('지도의 정류장을 눌러 버스 노선을 확인하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 12)),
           const Divider(height: 28),
           _sectionTitle('곧 도착하는 버스', action: '더보기', onAction: () => setState(() => _selectedIndex = 1)),
           const SizedBox(height: 12),
@@ -205,16 +138,16 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           route: nextBus?.busNum, arrival: nextBus?.remain,
           onBusTap: nextBus == null ? null : () => _openArrival(nextBus))),
         Positioned(top: 22, left: 22, right: 22, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('좋은 하루예요!', style: AppTextStyles.pageTitle),
+          const Text('버스 정류장 지도', style: AppTextStyles.pageTitle),
           const SizedBox(height: 4),
-          const Text('지금, 버스가 곧 도착해요.', style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
+          const Text('지도를 움직여 정류장을 찾아보세요.', style: TextStyle(color: AppColors.secondaryText, fontSize: 16)),
           const SizedBox(height: 18),
           Row(children: [Expanded(child: Material(color: Colors.white, borderRadius: BorderRadius.circular(28), elevation: 2,
             child: InkWell(borderRadius: BorderRadius.circular(28), onTap: _openStopSearch,
               child: const Padding(padding: EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                 child: Row(children: [Icon(Icons.search, color: AppColors.secondaryText), SizedBox(width: 10),
                   Expanded(child: Text('정류장이나 버스 번호를 검색하세요', style: TextStyle(color: AppColors.secondaryText, fontSize: 13)))]))))),
-            const SizedBox(width: 10), IconButton.filled(tooltip: '지도 안내', onPressed: () => _showMessage('지도 미리보기', '지도를 확대하거나 이동할 수 있어요. 실제 위치·정류장 좌표 연결은 추후 적용됩니다.'),
+            const SizedBox(width: 10), IconButton.filled(tooltip: '지도 안내', onPressed: () => _showMessage('정류장 지도', '지도의 파란 원을 눌러 정류장과 노선을 확인하세요. 공식 노선 경로가 등록되어 있는 경우에만 컬러 경로가 표시됩니다.'),
               icon: const Icon(Icons.my_location_rounded))]),
         ])),
         if (wide) Positioned(left: 24, bottom: 24, width: 390, child: ConstrainedBox(constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.6), child: SingleChildScrollView(child: panel)))
@@ -563,7 +496,7 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           ),
           const SizedBox(height: 20),
           const Text(
-            '버스 타이머 · 디자인 프리뷰',
+            '버스 타이머 · 대중교통 지도',
             style: TextStyle(color: AppColors.secondaryText, fontSize: 12),
           ),
         ],
