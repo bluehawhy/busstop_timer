@@ -25,6 +25,45 @@ export async function busApi(request,db,user,admin,path) {
     if(provider==='tago' && !(await catalogCities(db)).some(c=>c.provider==='tago'&&c.cityCode===cityCode)) throw new ApiError('UNSUPPORTED_CITY',409);
     return Response.json(await searchCatalog(db,{provider,cityCode:provider==='tago'?cityCode:null,query,arsNo,page}));
   }
+  // Viewport-only stop discovery: no unbounded national stop list is sent to a map.
+  if(path==='/api/bus/map/stops'&&method==='GET') {
+    const coordinates=['south','north','west','east'].map(key=>Number(url.searchParams.get(key)));
+    const [south,north,west,east]=coordinates;
+    if(coordinates.some((n,i)=>url.searchParams.get(['south','north','west','east'][i])===null||!Number.isFinite(n))||
+      south<-90||north>90||west<-180||east>180||south>=north||west>=east)
+      throw new ApiError('INVALID_MAP_BOUNDS',400);
+    if(north-south>0.4||east-west>0.4) return Response.json({stops:[],zoomRequired:true});
+    const centerLat=(south+north)/2,centerLng=(west+east)/2;
+    const stops=await db.prepare(`SELECT id,name,latitude,longitude,provider_ars_no AS "arsNo"
+      FROM stops WHERE latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
+      ORDER BY abs(latitude-$5)+abs(longitude-$6),id LIMIT 251`)
+      .all(south,north,west,east,centerLat,centerLng);
+    return Response.json({stops:stops.slice(0,250),truncated:stops.length>250});
+  }
+  // Only authority-verified road geometry is exposed; stop-to-stop straight lines are never fabricated.
+  if(path==='/api/bus/map/route'&&method==='GET') {
+    const routeId=url.searchParams.get('routeId');
+    if(!text(routeId)) throw new ApiError('INVALID_ROUTE_ID',400);
+    const shape=await db.prepare('SELECT route_name AS "routeName",source,geometry FROM bus_route_shapes WHERE route_id=$1').get(routeId);
+    return Response.json({routeId,verified:Boolean(shape),routeName:shape?.routeName??null,
+      source:shape?.source??null,geometry:shape?.geometry??null});
+  }
+  if(path==='/api/bus/map/route'&&method==='POST') {
+    if(!admin) throw new ApiError('FORBIDDEN',403);
+    const body=await request.json();
+    const shape=body?.geometry;
+    const coords=shape?.coordinates;
+    if(!text(body?.routeId)||!text(body?.routeName)||!text(body?.source)||
+      shape?.type!=='LineString'||!Array.isArray(coords)||coords.length<2||coords.length>10000||
+      !coords.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&
+        p[0]>=-180&&p[0]<=180&&p[1]>=-90&&p[1]<=90))
+      throw new ApiError('INVALID_ROUTE_SHAPE',400);
+    await db.prepare(`INSERT INTO bus_route_shapes(route_id,route_name,source,geometry)
+      VALUES($1,$2,$3,$4::jsonb) ON CONFLICT(route_id) DO UPDATE SET
+      route_name=excluded.route_name,source=excluded.source,geometry=excluded.geometry,updated_at=now()`)
+      .run(body.routeId,body.routeName,body.source,JSON.stringify(shape));
+    return Response.json({saved:true,routeId:body.routeId});
+  }
   if(path==='/api/bus/stops'&&method==='GET') {
     const q=(url.searchParams.get('q')??'').trim().slice(0,100);
     return Response.json({stops:await db.prepare(`SELECT id,name,latitude,longitude,provider_stop_id,provider_city_code,provider_ars_no FROM stops
