@@ -19,7 +19,6 @@ class StopMapPreview extends ConsumerStatefulWidget {
     this.onBusTap,
     this.onStopChanged,
     this.onRouteChanged,
-    this.onArrivalsChanged,
   });
 
   final BusanMapRegion region;
@@ -28,7 +27,6 @@ class StopMapPreview extends ConsumerStatefulWidget {
   final VoidCallback? onBusTap;
   final ValueChanged<Map<String, dynamic>?>? onStopChanged;
   final ValueChanged<Map<String, dynamic>?>? onRouteChanged;
-  final ValueChanged<List<Map<String, dynamic>>>? onArrivalsChanged;
 
   @override
   ConsumerState<StopMapPreview> createState() => _StopMapPreviewState();
@@ -233,7 +231,6 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
     });
     widget.onStopChanged?.call(stop);
     widget.onRouteChanged?.call(null);
-    widget.onArrivalsChanged?.call(const []);
     await controller?.clearLines();
     try {
       final api = await _service();
@@ -252,19 +249,7 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
         setState(() => _routeNotice = '노선을 불러오지 못했습니다. 다시 시도해주세요.');
       }
     }
-    // Arrivals come from the provider. No example or guessed ETA is displayed.
-    try {
-      final api = await _service();
-      final live = await api.request('bus/arrivals?${Uri(queryParameters: {
-        'stopId': '${stop['id']}',
-      }).query}');
-      if (!mounted || _selectedStop?['id'] != stop['id']) return;
-      final arrivals = (live['arrivals'] as List<dynamic>? ?? [])
-          .map((row) => Map<String, dynamic>.from(row as Map)).toList();
-      widget.onArrivalsChanged?.call(arrivals);
-    } catch (_) {
-      // A provider failure must not hide a stop or its known routes.
-    }
+
   }
 
   Future<void> _selectRoute(Map<String, dynamic> route) async {
