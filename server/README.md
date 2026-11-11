@@ -1,6 +1,10 @@
-# Ubuntu 버스 서버 + 전용 PostgreSQL
+# Ubuntu 버스 서버 + 전용 PostgreSQL (독립 Compose 배포 참고)
 
-운영 주소: **https://bustimer.bluewaikiki.top/**. 버스 프로젝트의 Node.js 24 API와 PostgreSQL 16을 함께 실행한다. 다른 프로젝트의 PostgreSQL 컨테이너·볼륨은 사용하지 않는다.
+> **현재 운영 플랫폼은 이 독립 Compose 배포 방식과 다릅니다.** 현재 배포는 대시보드의 프로젝트 slug `bustimer`를 사용하며, 웹은 `https://app.bluewaikiki.top/bustimer/`, API는 `https://api.bluewaikiki.top/bustimer`입니다. 서버 런타임에는 `BASE_PATH=/bustimer`가 필요합니다. [플랫폼 지도·인증 운영 기준](../docs/TRANSIT_MAP_IMPLEMENTATION.md#8-운영-api-도메인--기존-정류장-복원-2026-11-11)과 [플랫폼 변수 예시](deploy/platform-runtime.env.example)를 참고하세요.
+>
+> 아래 명령과 `deploy/deploy.sh`는 **별도 독립 서버·독립 Caddy**를 구축할 때의 레거시 절차입니다. 플랫폼 Function에 그대로 실행하지 마세요.
+
+이전 독립 배포 예시 주소: **https://bustimer.bluewaikiki.top/**. 버스 프로젝트의 Node.js 24 API와 PostgreSQL 16을 함께 실행한다. 다른 프로젝트의 PostgreSQL 컨테이너·볼륨은 사용하지 않는다.
 
 - `bustimer`: API·Flutter Web 제공. 공통 Caddy에는 `bus-proxy`의 `bus-api:18082`로 연결한다.
 - `postgres`: 버스 전용 DB. 호스트 포트와 프록시 네트워크에 연결하지 않는다.
