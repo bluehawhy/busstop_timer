@@ -437,10 +437,8 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
                 )),
                 const SizedBox(width: 9),
                 IconButton.filled(
-                  tooltip: '지도 안내',
-                  onPressed: () => _showMessage('정류장 지도',
-                    '지도 위 버스 아이콘을 눌러 정류장을 확인하세요. '
-                    '공식 노선 경로가 제공된 경우 파란색 노선으로 표시됩니다.'),
+                  tooltip: '구·군 지역 선택',
+                  onPressed: _selectMapDistrict,
                   icon: const Icon(Icons.my_location_rounded),
                 ),
               ]),
