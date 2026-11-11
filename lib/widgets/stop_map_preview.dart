@@ -249,7 +249,6 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
         setState(() => _routeNotice = '노선을 불러오지 못했습니다. 다시 시도해주세요.');
       }
     }
-
   }
 
   Future<void> _selectRoute(Map<String, dynamic> route) async {
@@ -337,7 +336,6 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
     _map?.clearLines();
     widget.onStopChanged?.call(null);
     widget.onRouteChanged?.call(null);
-    widget.onArrivalsChanged?.call(const []);
     setState(() {
       _selectedStop = null;
       _selectedRoute = null;
