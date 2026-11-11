@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../app_styles.dart';
@@ -7,7 +8,7 @@ import '../services/journey_service.dart';
 
 /// Real OSM vector map and stop catalog. Vehicle icons and route polylines are
 /// deliberately omitted unless authoritative coordinates are available.
-class StopMapPreview extends StatefulWidget {
+class StopMapPreview extends ConsumerStatefulWidget {
   const StopMapPreview({super.key, this.route, this.arrival, this.onBusTap});
 
   final String? route;
@@ -15,10 +16,10 @@ class StopMapPreview extends StatefulWidget {
   final VoidCallback? onBusTap;
 
   @override
-  State<StopMapPreview> createState() => _StopMapPreviewState();
+  ConsumerState<StopMapPreview> createState() => _StopMapPreviewState();
 }
 
-class _StopMapPreviewState extends State<StopMapPreview> {
+class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
   static const _busan = LatLng(35.1796, 129.0756);
   static const _routePalette = [
     '#F36A2B', '#EA1658', '#7BC65B', '#F5AE16', '#009CA5',
@@ -32,6 +33,7 @@ class _StopMapPreviewState extends State<StopMapPreview> {
   Map<String, dynamic>? _selectedStop, _selectedRoute;
   List<Map<String, dynamic>> _routes = [];
   final Map<String, Map<String, dynamic>> _stopsByCircle = {};
+  final Map<String, Map<String, dynamic>> _stopsBySymbol = {};
   final Map<String, Circle> _circleByStop = {};
 
   @override
@@ -66,6 +68,10 @@ class _StopMapPreviewState extends State<StopMapPreview> {
       final stop = _stopsByCircle[circle.id];
       if (stop != null) _selectStop(stop);
     });
+    map.onSymbolTapped.add((symbol) {
+      final stop = _stopsBySymbol[symbol.id];
+      if (stop != null) _selectStop(stop);
+    });
   }
 
   Future<void> _refreshVisibleStops() async {
@@ -86,6 +92,8 @@ class _StopMapPreviewState extends State<StopMapPreview> {
       if (north - south > 0.4 || east - west > 0.4 ||
           south >= north || west >= east) {
         await controller.clearCircles();
+        await controller.clearSymbols();
+        _stopsBySymbol.clear();
         _stopsByCircle.clear();
         _circleByStop.clear();
         if (mounted) setState(() {
@@ -109,6 +117,8 @@ class _StopMapPreviewState extends State<StopMapPreview> {
           .where((stop) => stop['latitude'] is num && stop['longitude'] is num)
           .toList();
       await controller.clearCircles();
+      await controller.clearSymbols();
+      _stopsBySymbol.clear();
       _stopsByCircle.clear();
       _circleByStop.clear();
       final circles = await controller.addCircles([
@@ -128,6 +138,29 @@ class _StopMapPreviewState extends State<StopMapPreview> {
       for (var i = 0; i < circles.length; i++) {
         _stopsByCircle[circles[i].id] = stops[i];
         _circleByStop['${stops[i]['id']}'] = circles[i];
+      }
+      // Labels follow the user's zoom level to avoid crowding.
+      if (north - south < 0.075) {
+        final named = north - south < 0.028;
+        final labelled = stops.take(named ? 50 : 75).toList();
+        final symbols = await controller.addSymbols([
+          for (final stop in labelled)
+            SymbolOptions(
+              geometry: LatLng((stop['latitude'] as num).toDouble(),
+                (stop['longitude'] as num).toDouble()),
+              textField: named ? '${stop['name']}'
+                : (stop['arsNo']?.toString() ?? ''),
+              textSize: named ? 11 : 10,
+              textColor: '#475569',
+              textHaloColor: '#FFFFFF',
+              textHaloWidth: 1.7,
+              textAnchor: 'top',
+              textOffset: const Offset(0, 0.9),
+            ),
+        ]);
+        for (var i = 0; i < symbols.length; i++) {
+          _stopsBySymbol[symbols[i].id] = labelled[i];
+        }
       }
       if (mounted) setState(() {
         _zoomRequired = result['zoomRequired'] == true;
@@ -236,15 +269,18 @@ class _StopMapPreviewState extends State<StopMapPreview> {
     setState(() => _saving = true);
     try {
       final api = await _service();
-      await api.request('bus/subscriptions', body: {
+      final saved = await api.request('bus/subscriptions', body: {
         'stopId': _selectedStop!['id'],
         'routeId': _selectedRoute!['routeId'],
       });
       if (!mounted) return;
       final name = _selectedStop!['name'].toString();
       final number = _selectedRoute!['routeName'].toString();
-      // The API subscription is durable; ETA is intentionally not fabricated.
-      // The live-bus screen fetches authoritative arrival times separately.
+      // Preserve the registration on the home tab without inventing an ETA.
+      ref.read(busListProvider.notifier).addBus(BusArrivalInfo(
+        recordId: '${saved['id']}',
+        station: name, busNum: number, remain: '도착정보 조회 필요',
+      ));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$name · $number 노선을 저장했어요.')),
       );
