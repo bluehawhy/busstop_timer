@@ -20,11 +20,47 @@ async function rate(db, key, limit, seconds) {
     expires_at=CASE WHEN auth_rate_limits.expires_at<=NOW() THEN excluded.expires_at ELSE auth_rate_limits.expires_at END RETURNING count`).get(key,seconds);
   if(row.count>limit) throw new ApiError('AUTH_RATE_LIMITED',429);
 }
+// Only allow explicitly enumerated diagnostics. Never log Nodemailer's raw
+// error, message, response, stack or envelope: they can contain addresses,
+// links, SMTP credentials, or other user-supplied values.
+const smtpErrorCodes = new Set([
+  'EAUTH','EINVALIDLOGIN','ECONNECTION','ETIMEDOUT','ESOCKET','EENVELOPE',
+  'EMESSAGE','ENOTFOUND','EAI_AGAIN','ECONNREFUSED','ECONNRESET',
+  'EHOSTUNREACH','ENETUNREACH','EPIPE','CERT_HAS_EXPIRED',
+  'ERR_TLS_CERT_ALTNAME_INVALID','UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'SELF_SIGNED_CERT_IN_CHAIN','DEPTH_ZERO_SELF_SIGNED_CERT',
+]);
+const smtpCommands = new Set([
+  'CONN','STARTTLS','AUTH PLAIN','AUTH LOGIN','AUTH XOAUTH2',
+  'MAIL FROM','RCPT TO','DATA','QUIT',
+]);
+const smtpSyscalls = new Set(['connect','getaddrinfo','read','write']);
+function logSmtpFailure(error) {
+  const code = smtpErrorCodes.has(error?.code) ? error.code : 'UNKNOWN';
+  const command = smtpCommands.has(error?.command) ? error.command : 'UNKNOWN';
+  const responseCode = Number.isInteger(error?.responseCode) &&
+    error.responseCode >= 100 && error.responseCode <= 599
+    ? error.responseCode : null;
+  const syscall = smtpSyscalls.has(error?.syscall) ? error.syscall : null;
+  console.error('[email-auth] smtp_send_failed', JSON.stringify({
+    code, command, responseCode, syscall,
+  }));
+}
+
 async function sendMail(email,code,link) {
   const env=process.env;
-  if(!env.AUTH_SMTP_HOST || !env.AUTH_SMTP_USERNAME || !env.AUTH_SMTP_PASSWORD || !env.AUTH_EMAIL_FROM) throw new ApiError('AUTH_MAIL_NOT_CONFIGURED',503);
+  const missing = ['AUTH_SMTP_HOST','AUTH_SMTP_USERNAME','AUTH_SMTP_PASSWORD','AUTH_EMAIL_FROM']
+    .filter(key => !env[key]);
+  if(missing.length) {
+    // Only fixed configuration key names are logged, never their values.
+    console.error('[email-auth] smtp_not_configured', JSON.stringify({missing}));
+    throw new ApiError('AUTH_MAIL_NOT_CONFIGURED',503);
+  }
   const mode=env.AUTH_SMTP_TLS_MODE??'starttls';
-  if(!['ssl','starttls'].includes(mode)) throw new ApiError('AUTH_MAIL_NOT_CONFIGURED',503);
+  if(!['ssl','starttls'].includes(mode)) {
+    console.error('[email-auth] smtp_not_configured', JSON.stringify({invalid:'AUTH_SMTP_TLS_MODE'}));
+    throw new ApiError('AUTH_MAIL_NOT_CONFIGURED',503);
+  }
   const transport=nodemailer.createTransport({host:env.AUTH_SMTP_HOST,port:Number(env.AUTH_SMTP_PORT??(mode==='ssl'?465:587)),
     secure:mode==='ssl',requireTLS:true,auth:{user:env.AUTH_SMTP_USERNAME,pass:env.AUTH_SMTP_PASSWORD},
     connectionTimeout:10000,greetingTimeout:10000,socketTimeout:15000});
@@ -32,7 +68,10 @@ async function sendMail(email,code,link) {
     await transport.sendMail({from:env.AUTH_EMAIL_FROM,to:email,subject:link?'버스타이머 이메일 인증 링크':'버스타이머 이메일 인증 숫자',
       text:link?`아래 링크에서 이메일 인증을 완료해주세요. 10분간 유효합니다.\n${link}`:`인증 숫자: ${code}\n버스타이머 화면에 입력해주세요. 10분 동안 유효하며 한 번만 사용할 수 있습니다.`,
       html:authMailHtml({code,link})});
-  } catch { throw new ApiError('AUTH_MAIL_UNAVAILABLE',503); }
+  } catch(error) {
+    logSmtpFailure(error);
+    throw new ApiError('AUTH_MAIL_UNAVAILABLE',503);
+  }
   finally { transport.close(); }
 }
 

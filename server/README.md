@@ -290,6 +290,22 @@ bustimer 서비스에 `TAGO_STATION_SERVICE_KEY`(버스정류소정보), `TAGO_A
 - `AUTH_SESSION_HOURS=6`
 - `AUTH_TRUST_PROXY=true`: 외부 접근을 Caddy로만 허용하고 Caddy가 X-Forwarded-For를 덮어쓰는 배포에서만 활성화. 비활성화 시 IP 발송 한도는 직접 연결 주소 기준이므로 프록시 이용자가 한도를 공유합니다.
 
+### SMTP 메일 발송 실패 로그 확인
+
+이메일 발송 실패 시 서버 Function 로그에 아래 형태의 **비식별 진단 정보만** 남깁니다.
+
+```text
+[email-auth] smtp_send_failed {"code":"EAUTH","command":"AUTH PLAIN","responseCode":535,"syscall":null}
+```
+
+- `code`: 허용된 SMTP/네트워크 오류 코드(예: `EAUTH`, `ETIMEDOUT`, `ECONNREFUSED`). 허용 목록에 없는 값은 `UNKNOWN`.
+- `command`: 허용 목록의 SMTP 단계(예: `AUTH PLAIN`, `MAIL FROM`, `RCPT TO`)만 출력. 알 수 없으면 `UNKNOWN`.
+- `responseCode`: 정상 범위의 3자리 SMTP 응답 코드만 출력, 없으면 `null`.
+- `syscall`: 허용된 네트워크 호출명만 출력하며, 없으면 `null`.
+- 설정 누락 시 `smtp_not_configured` 이벤트와 **누락된 설정 이름**만 출력합니다.
+- **메일 주소, 인증 링크, OTP, API 키, SMTP 비밀번호, 오류 원문/스택, 서버 응답 본문은 기록하지 않습니다.** 외부 API 응답은 기존과 동일하게 `AUTH_MAIL_UNAVAILABLE` 또는 `AUTH_MAIL_NOT_CONFIGURED`만 반환합니다.
+- 이 로그는 실제로 다시 인증 메일 발송을 요청해야 나타납니다. 코드 배포만으로 SMTP 연결을 자동 시험하거나 인증 메일을 전송하지 않습니다.
+
 SMTP와 서명키는 서버에만 입력하며 앱 빌드에 넣지 않습니다. 가계부와 동일하게 `MAIL_AUTH_MODE=link`이면 링크 인증, `MAIL_AUTH_MODE=otp`이면 6자리 인증번호를 사용합니다(미설정 기본값 otp). 앱이 `/api/auth/config`를 읽어 화면과 요청을 바꾸므로 앱 재빌드 없이 서버 환경변수 변경과 Compose 재생성으로 전환할 수 있습니다.
 
 링크 모드에서는 `AUTH_EMAIL_LINK_URL=https://bustimer.bluewaikiki.top/api/auth/verify`로 설정합니다. 가계부의 `/ledger/auth/verify` 주소를 복사하지 않습니다. 링크를 연 후 확인 버튼을 누르면 인증이 완료되고 가능한 브라우저에서는 창을 닫습니다. 창이 남으면 닫고 원래 앱 화면으로 돌아가면 됩니다. 원래 화면은 3초 간격으로 완료 여부를 확인하고 수동 확인 버튼도 제공합니다. 링크는 원래 인증을 요청한 세션에만 연결되므로 다른 기기에서 메일을 열어도 요청한 앱이 인증됩니다. GET 요청으로는 링크를 소비하지 않아 메일 미리보기의 자동 인증을 방지합니다.
