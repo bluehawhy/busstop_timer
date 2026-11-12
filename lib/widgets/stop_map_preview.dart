@@ -17,6 +17,7 @@ class StopMapPreview extends ConsumerStatefulWidget {
     this.route,
     this.arrival,
     this.onBusTap,
+    this.onMapTap,
     this.onStopChanged,
     this.onRouteChanged,
   });
@@ -25,6 +26,7 @@ class StopMapPreview extends ConsumerStatefulWidget {
   final String? route;
   final String? arrival;
   final VoidCallback? onBusTap;
+  final VoidCallback? onMapTap;
   final ValueChanged<Map<String, dynamic>?>? onStopChanged;
   final ValueChanged<Map<String, dynamic>?>? onRouteChanged;
 
@@ -352,6 +354,8 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
         initialCameraPosition: CameraPosition(target: widget.region.center, zoom: 14),
         styleString: 'assets/map/bus_transit_style.json',
         onMapCreated: _onMapCreated,
+        onMapClick: (_, __) => widget.onMapTap?.call(),
+        featureTapsTriggersMapClick: false,
         onStyleLoadedCallback: _onStyleReady,
         onCameraIdle: () { _refreshVisibleStops(); },
         rotateGesturesEnabled: false,

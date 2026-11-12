@@ -18,6 +18,9 @@ class BusHomePage extends ConsumerStatefulWidget {
 }
 
 class _BusHomePageState extends ConsumerState<BusHomePage> {
+  static const double _stopPanelOpenSize = 0.43;
+  final DraggableScrollableController _stopPanelController =
+      DraggableScrollableController();
   int _selectedIndex = 0;
   final Map<String, bool> _alertEnabled = {};
   final Map<String, String> _alertLeadByBus = {};
@@ -35,6 +38,21 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
   void initState() {
     super.initState();
     _restoreSavedBuses();
+  }
+
+  @override
+  void dispose() {
+    _stopPanelController.dispose();
+    super.dispose();
+  }
+
+  void _animateStopPanelTo(double size) {
+    if (!_stopPanelController.isAttached) return;
+    _stopPanelController.animateTo(
+      size,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _restoreSavedBuses() async {
@@ -352,12 +370,14 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           route: nextBus?.busNum,
           arrival: nextBus?.remain,
           onBusTap: nextBus == null ? null : () => _openArrival(nextBus),
+          onMapTap: () => _animateStopPanelTo(0),
           onStopChanged: (stop) {
             if (!mounted) return;
             setState(() {
               _selectedMapStop = stop;
               _selectedMapRoute = null;
             });
+            if (stop != null) _animateStopPanelTo(_stopPanelOpenSize);
           },
           onRouteChanged: (route) {
             if (!mounted) return;
@@ -450,8 +470,9 @@ class _BusHomePageState extends ConsumerState<BusHomePage> {
           ),
         ),
         DraggableScrollableSheet(
-          initialChildSize: 0.43,
-          minChildSize: 0.26,
+          controller: _stopPanelController,
+          initialChildSize: _stopPanelOpenSize,
+          minChildSize: 0.0,
           maxChildSize: 0.82,
           builder: (context, controller) => Container(
             decoration: const BoxDecoration(
