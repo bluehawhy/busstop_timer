@@ -43,6 +43,8 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
   JourneyService? _api;
   bool _ready = false, _loading = false, _pending = false, _zoomRequired = false;
   bool _truncated = false, _saving = false;
+  // Small at overview zoom; grows slightly when exploring an individual stop.
+  double _regularIconSize = 0.34;
 
   String? _error, _routeNotice;
   Map<String, dynamic>? _selectedStop, _selectedRoute;
@@ -110,6 +112,49 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
     }
   }
 
+  /// Keep only one icon in a screen-space grid at overview zoom.
+  ///
+  /// Server results remain the authoritative coordinates; no points are
+  /// moved or fabricated. Hidden stops reappear as the user zooms in.
+  /// The selected stop always gets first priority within its grid cell.
+  List<Map<String, dynamic>> _visibleMarkerStops(
+    List<Map<String, dynamic>> stops, {
+    required double south,
+    required double north,
+    required double west,
+    required double east,
+    required Size viewport,
+  }) {
+    final latitudeSpan = north - south;
+    final longitudeSpan = east - west;
+    if (latitudeSpan <= 0 || longitudeSpan <= 0) return const [];
+    final spacing = latitudeSpan > 0.07 ? 88.0
+        : latitudeSpan > 0.028 ? 73.0
+        : latitudeSpan > 0.012 ? 55.0
+        : 37.0;
+    final selectedId = _selectedStop?['id']?.toString();
+    final prioritized = <Map<String, dynamic>>[
+      for (final stop in stops)
+        if (stop['id']?.toString() == selectedId) stop,
+      for (final stop in stops)
+        if (stop['id']?.toString() != selectedId) stop,
+    ];
+    final occupied = <String>{};
+    final result = <Map<String, dynamic>>[];
+    for (final stop in prioritized) {
+      final x = ((stop['longitude'] as num).toDouble() - west) /
+          longitudeSpan * viewport.width;
+      final y = (north - (stop['latitude'] as num).toDouble()) /
+          latitudeSpan * viewport.height;
+      if (x < 0 || y < 0 || x > viewport.width || y > viewport.height) {
+        continue;
+      }
+      final cell = '${(x / spacing).floor()}:${(y / spacing).floor()}';
+      if (occupied.add(cell)) result.add(stop);
+    }
+    return result;
+  }
+
   Future<void> _refreshVisibleStops() async {
     final controller = _map;
     if (controller == null || !_ready) return;
@@ -150,12 +195,21 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
           .map((item) => Map<String, dynamic>.from(item as Map))
           .where((stop) => stop['latitude'] is num && stop['longitude'] is num)
           .toList();
+      // The full stop catalog is still fetched. Display only spaced samples
+      // until a closer zoom, preserving the exact location of each icon.
+      final viewport = context.size ?? MediaQuery.sizeOf(context);
+      final markerStops = _visibleMarkerStops(
+        stops,
+        south: south, north: north, west: west, east: east,
+        viewport: viewport,
+      );
+      _regularIconSize = north - south > 0.028 ? 0.31
+          : north - south > 0.012 ? 0.34 : 0.40;
       await controller.clearSymbols();
       _stopsBySymbol.clear();
       _stopSymbols.clear();
-      // Bus-front pictograms from concept 4, with collision-safe symbols.
       final markers = await controller.addSymbols([
-        for (final stop in stops)
+        for (final stop in markerStops)
           SymbolOptions(
             geometry: LatLng(
               (stop['latitude'] as num).toDouble(),
@@ -163,31 +217,34 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
             ),
             iconImage: stop['id'] == _selectedStop?['id']
                 ? _selectedIcon : _normalIcon,
-            iconSize: stop['id'] == _selectedStop?['id'] ? 0.60 : 0.43,
+            iconSize: stop['id'] == _selectedStop?['id']
+                ? 0.53 : _regularIconSize,
           ),
       ]);
       for (var i = 0; i < markers.length; i++) {
-        _stopsBySymbol[markers[i].id] = stops[i];
-        _stopSymbols['${stops[i]['id']}'] = markers[i];
+        _stopsBySymbol[markers[i].id] = markerStops[i];
+        _stopSymbols['${markerStops[i]['id']}'] = markers[i];
       }
-      // Only label nearby stops at close zoom; dense numbers must not
-      // compete with the map title or the selected route.
-      if (north - south < 0.018) {
-        final named = north - south < 0.009;
-        final labelled = stops.take(named ? 25 : 18).toList();
+      // Names are deliberately reserved for detailed neighborhood zoom.
+      // MapLibre still handles label collisions with the cartographic labels.
+      if (north - south < 0.011) {
+        final named = north - south < 0.006;
+        final labelled = markerStops.take(named ? 18 : 10).toList();
         final symbols = await controller.addSymbols([
           for (final stop in labelled)
             SymbolOptions(
-              geometry: LatLng((stop['latitude'] as num).toDouble(),
-                (stop['longitude'] as num).toDouble()),
+              geometry: LatLng(
+                (stop['latitude'] as num).toDouble(),
+                (stop['longitude'] as num).toDouble(),
+              ),
               textField: named ? '${stop['name']}'
-                : (stop['arsNo']?.toString() ?? ''),
+                  : (stop['arsNo']?.toString() ?? ''),
               textSize: named ? 10.5 : 10,
-              textColor: '#566A72',
-              textHaloColor: '#F9FDFB',
+              textColor: '#526880',
+              textHaloColor: '#FFFFFF',
               textHaloWidth: 1.8,
               textAnchor: 'top',
-              textOffset: const Offset(0, 0.9),
+              textOffset: const Offset(0, 1.4),
             ),
         ]);
         for (var i = 0; i < symbols.length; i++) {
@@ -214,14 +271,14 @@ class _StopMapPreviewState extends ConsumerState<StopMapPreview> {
     final controller = _map;
     final previous = _stopSymbols['${_selectedStop?['id']}'];
     if (previous != null && controller != null) {
-      await controller.updateSymbol(previous, const SymbolOptions(
-        iconImage: _normalIcon, iconSize: 0.43,
+      await controller.updateSymbol(previous, SymbolOptions(
+        iconImage: _normalIcon, iconSize: _regularIconSize,
       ));
     }
     final selected = _stopSymbols['${stop['id']}'];
     if (selected != null && controller != null) {
       await controller.updateSymbol(selected, const SymbolOptions(
-        iconImage: _selectedIcon, iconSize: 0.60,
+        iconImage: _selectedIcon, iconSize: 0.53,
       ));
     }
     if (!mounted) return;
