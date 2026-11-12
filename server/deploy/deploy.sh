@@ -55,7 +55,9 @@ docker network inspect bus-proxy >/dev/null 2>&1 || docker network create bus-pr
 cd server
 compose=(docker compose -p busstop_timer -f compose.yaml -f compose.proxy.yaml)
 "${compose[@]}" config --quiet
-"${compose[@]}" up -d --build --wait --wait-timeout 180
+"${compose[@]}" up -d --build
+# Flutter can replace build/web; rebind only the web service, preserving PostgreSQL.
+"${compose[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 180 bustimer
 "${compose[@]}" ps
 "${compose[@]}" exec -T bustimer node -e \
   "fetch('http://127.0.0.1:18082/health').then(async r=>{console.log(await r.text());process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
